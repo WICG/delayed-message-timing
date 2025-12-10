@@ -117,7 +117,7 @@ The following sections will analyze each area with examples. All examples involv
 
 The following example code demonstrates how a long-running task on a worker thread can block subsequent messages in its task queue.
 
-[Link to live example](https://wicg.github.io/delayed-message-timing/examples/long-task)
+[Link to live example](https://wicg.github.io/delayed-message-timing/examples/long_task)
 
 ### index.html
 
