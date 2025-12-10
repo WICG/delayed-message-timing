@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>postMessage Serialization/Deserialization Performance Impact</title>
+  </head>
+  <body>
+    <h1>postMessage Serialization/Deserialization Performance Impact</h1>
+    <p>
+      This example demonstrates how large data objects affect message passing performance 
+      in Web Workers due to serialization and deserialization overhead.
+    </p>
+    <button id="sendJSON">Send Large JSON (~7MB)</button>
+    <p>Check the console to see serialization and deserialization timing measurements.</p>
+    <script src="main.js"></script>
+  </body>
+</html>
