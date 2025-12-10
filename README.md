@@ -117,7 +117,7 @@ The following sections will analyze each area with examples. All examples involv
 
 The following example code demonstrates how a long-running task on a worker thread can block subsequent messages in its task queue.
 
-[Link to live demo](https://joone.github.io/web/explainers/delayed_messages/long_task/)
+[Link to live example](https://wicg.github.io/delayed-message-timing/examples/long-task)
 
 ### index.html
 
@@ -212,7 +212,7 @@ Another challenge is when the target context's task queue becomes overloaded wit
  This example demonstrates how task queues in web workers can become congested when tasks take longer to process than the rate at which
  messages are sent. It sends delete tasks every 30ms, then a read task, measuring queue wait times to show the congestion effect.
 
-[Link to live example](https://joone.github.io/web/explainers/delayed_messages/congested/)
+[Link to live example](https://wicg.github.io/delayed-message-timing/examples/congested/)
 
 ### index.html
 
@@ -334,7 +334,7 @@ When data is sent using `postMessage()`, it undergoes serialization by the sende
 
 The following example code demonstrate the delay introduced by serializing/deserializing a large JSON object during `postMessage()`.
 
-[Link to live demo](https://joone.github.io/web/explainers/delayed_messages/serialization/)
+[Link to live example](https://wicg.github.io/delayed-message-timing/examples/serialization/)
 
 
 ### index.html
