@@ -629,17 +629,25 @@ observer.observe({type: 'delayed-message', buffered: true});
 ```
 
 ### `durationThreshold`
-The definition of a "delayed" message can vary by application. The API allows developers to set a `durationThreshold` (in milliseconds) when observing. Only messages whose total `duration` (from `startTime` to `processingEnd`) exceeds this threshold will generate a performance entry.
+The definition of a "delayed" message can vary by application. To accommodate different use cases, the API allows developers to set a `durationThreshold` (in milliseconds) when observing. Only messages whose total `blockedDuration` (from `sentTime` to `processingStart`) exceeds this threshold will generate a performance entry.
 
   * The default `durationThreshold` is 200ms.
   * A minimum threshold (e.g., 50ms) will be enforced to prevent excessive entry generation for very frequent, short messages.
-
 
 ```js
 // Observe entries where the total duration exceeds 50ms
 observer.observe({ type: "delayed-message", durationThreshold: 50, buffered: true });
 
 ```
+
+### Why `blockedDuration` instead of `duration`?
+
+The `duration` value includes the time spent **executing the message handler itself**. A message whose handler performs long-running work may therefore have a large `duration` even if it was processed immediately after being dequeued.
+
+In such cases, the message is not delayed due to task queue congestion, but rather due to the cost of the handler execution.
+
+By contrast, `blockedDuration` measures only the time a message spends **waiting to be processed** after being posted. Using `blockedDuration` for `durationThreshold` ensures that delayed message entries reflect **queueing delays**, not long-running message handlers.
+
 ## Examples of a `delayed-message` Performance Entry
 
 The following JSON shows sample performance entries for the delayed messages identified in **Case 1: Thread Being Occupied**. This API automatically detects and reports these delays without requiring manual `performance.now()` tracking.
