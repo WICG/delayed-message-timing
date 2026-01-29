@@ -785,6 +785,17 @@ Developers can attempt to wrap `postMessage()` calls and `onmessage` handlers wi
 
 A native API can provide more accurate and comprehensive data with lower overhead.
 
+## Web Workers' Congestion Factors
+
+An alternative approach would be to measure **worker-level congestion** rather than focusing on message delay directly. CPU-heavy work in a worker, or even on the main thread, can affect when posted messages are eventually handled.
+
+Existing metrics such as `taskCount` and `scriptTaskCount` indicate how many tasks are ahead of a specific message, but they remain **message-centric** and are tied to individual message delivery.
+
+More general worker-level congestion factors also exist, such as task queue depth, CPU utilization, or garbage collection pauses. These factors influence overall responsiveness and can indirectly affect message timing.
+
+However, such metrics describe the **state of the execution context as a whole**, rather than explaining why a particular `postMessage` was delayed. As a result, they are less suitable for diagnosing message-specific latency and attributing delays to individual message deliveries, which is the primary goal of this API.
+
+
 # Security and Privacy Considerations
 
 This API is designed to provide developers with insights into the performance of their own applications and does not introduce new cross-origin information leakage.
