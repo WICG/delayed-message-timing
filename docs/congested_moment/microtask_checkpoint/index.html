@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <body>
+    <button id="start">Start</button>
+
+    <script>
+      window.addEventListener("message", (event) => {
+        console.log("MessageEvent task ran:", event.data);
+      });
+
+      document.getElementById("start").addEventListener("click", () => {
+        console.log("Click handler started");
+
+        // Enqueue a MessageEvent task.
+        console.log("Posting a message to enqueue a MessageEvent task...");
+        window.postMessage("ping");
+
+        // Keep enqueuing microtasks via chained Promises for 1000ms.
+        const deadline = performance.now() + 1000;
+        let count = 0;
+        function chainPromise() {
+          count++;
+          if (performance.now() < deadline) {
+            return Promise.resolve().then(chainPromise);
+          }
+          console.log(`Chained Promise microtasks completed: ${count}`);
+        }
+        chainPromise();
+
+        console.log("Click handler finished");
+      });
+    </script>
+  </body>
+</html>

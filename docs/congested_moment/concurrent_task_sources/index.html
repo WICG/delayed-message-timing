@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <body>
+    <h3>Move your mouse inside the box</h3>
+    <div id="area" style="width:300px;height:200px;border:1px solid black;"></div>
+
+    <script>
+      // Simulate work
+      function busyWork(ms) {
+        const start = performance.now();
+        while (performance.now() - start < ms) {}
+      }
+
+      const NOTICEABLE_DELAY_MS = 50;
+
+      // INPUT EVENT SOURCE
+      document.getElementById("area").addEventListener("mousemove", (e) => {
+        const schedulingDelay = performance.now() - e.timeStamp; // how late the event was handled
+        busyWork(8); // small work per event
+        if (schedulingDelay > NOTICEABLE_DELAY_MS)
+          console.log(`mousemove scheduling delay: ${schedulingDelay.toFixed(1)} ms`);
+      });
+
+      // TIMER SOURCE
+      const interval = 100;
+      let expectedTime = performance.now() + interval;
+      setInterval(() => {
+        const now = performance.now();
+        const schedulingDelay = now - expectedTime; // how late the timer actually fired
+        expectedTime = now + interval;
+
+        busyWork(5); // background periodic work
+
+        if (schedulingDelay > NOTICEABLE_DELAY_MS)
+          console.log(`Timer scheduling delay: ${schedulingDelay.toFixed(1)} ms`);
+      }, interval);
+
+      console.log("Move your mouse rapidly inside the box...");
+    </script>
+  </body>
+</html>

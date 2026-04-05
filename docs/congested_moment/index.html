@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congested Moment Demos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4A90E2;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        p.description {
+            color: #444;
+            margin-bottom: 30px;
+        }
+        .demo-list {
+            list-style: none;
+            padding: 0;
+        }
+        .demo-list li {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-left: 4px solid #4A90E2;
+            border-radius: 4px;
+        }
+        .demo-list li a {
+            color: #4A90E2;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .demo-list li a:hover {
+            text-decoration: underline;
+        }
+        .demo-list li p {
+            margin: 5px 0 0 0;
+            color: #666;
+        }
+        a.back {
+            color: #4A90E2;
+            text-decoration: none;
+        }
+        a.back:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <a class="back" href="../">&larr; Back to Explainer Demos</a>
+    <h1>Congested Moment</h1>
+    <p class="description">
+        A <strong>congested moment</strong> occurs when the browser's main thread is overwhelmed by
+        competing work&mdash;tasks, microtasks, and input events pile up faster than they can be
+        processed, causing noticeable delays in responsiveness. These demos illustrate common
+        scenarios that lead to congestion and help visualize its effects.
+    </p>
+
+    <h2>Demos</h2>
+    <ul class="demo-list">
+        <li>
+            <a href="concurrent_task_sources/">Concurrent Task Sources</a>
+            <p>Shows how input events (mousemove) and timer tasks compete for the main thread.
+               Move your mouse rapidly inside the box to observe scheduling delays when both
+               task sources are active simultaneously.</p>
+        </li>
+        <li>
+            <a href="microtask_checkpoint/">Microtask Checkpoint</a>
+            <p>Demonstrates how a flood of chained Promise microtasks can starve other queued
+               tasks. After clicking Start, a postMessage task is enqueued but cannot run until
+               the microtask checkpoint finishes&mdash;even though the click handler has already
+               returned.</p>
+        </li>
+    </ul>
+</body>
+</html>
