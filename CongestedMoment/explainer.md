@@ -24,6 +24,7 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
   - [Congested Moment Entry Structure](#congested-moment-entry-structure)
   - [Message Event Entry Structure](#message-event-entry-structure)
   - [`PerformanceMessageScriptInfo` and `PerformanceExecutionContextInfo`](#performancemessagescriptinfo-and-performanceexecutioncontextinfo)
+  - [Observing `PerformanceMessageEventTiming` Entries](#observing-performancemessageeventtiming-entries)
 - [Relationship to the Long Animation Frames (LoAF) API](#relationship-to-the-long-animation-frames-loaf-api)
   - [Not directly applicable to non-rendering contexts](#not-directly-applicable-to-non-rendering-contexts)
   - [A single LoAF entry cannot represent a congested moment](#a-single-loaf-entry-cannot-represent-a-congested-moment)
@@ -680,8 +681,8 @@ Message events contribute to execution context congestion both as sources of blo
 
 ```js
 const someMessageEventEntry = {
+  entryType: "event",
   name: "message",
-  entryType: "message",
 
   // Timing
   startTime,       // When postMessage() was called on the sender side
@@ -694,6 +695,10 @@ const someMessageEventEntry = {
   blockedDuration,  // sentTime → processingStart (pure queue wait time)
   serialization,    // Time spent serializing the message on the sender side
   deserialization,  // Time spent deserializing the message on the receiver side
+
+  // Inherited from PerformanceEventTiming (always false/0 for message events)
+  cancelable,    // Always false — message events are not cancelable
+  interactionId, // Always 0 — message events have no associated user interaction
 
   // Message metadata
   messageType, // "cross-worker-document" | "channel" | "cross-document" | "broadcast-channel"
@@ -724,6 +729,27 @@ const somePerformanceMessageScriptInfo = {
     type   // "main-thread" | "dedicated-worker" | "shared-worker" | "service-worker" | "window" | "iframe"
   }
 }
+```
+
+## Observing `PerformanceMessageEventTiming` Entries
+
+`PerformanceMessageEventTiming` entries can be observed independently of any congested moment. This is useful when a developer wants to monitor delayed messages across all contexts, with attribution details about which script sent the message and which handled it, including source location. This helps identify what kinds of messages are being delayed and where they originate.
+
+Because `PerformanceMessageEventTiming` extends `PerformanceEventTiming`, it is reported via the existing `"event"` entry type and is available in workers as well as the main thread.
+
+The `durationThreshold` option controls the minimum total duration a message event must exceed to be reported. For message events, the minimum enforced threshold is **200ms**; even if a lower value is specified, entries with a duration below 200ms will not be reported. This avoids excessive noise from short-lived messages that do not represent a real responsiveness problem.
+
+```js
+const observer = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (entry.name === "message") {
+      console.log("Delayed message:", entry);
+    }
+  }
+});
+
+// durationThreshold below 200ms is silently clamped to 200ms for message events
+observer.observe({ type: 'event', buffered: true, durationThreshold: 200 });
 ```
 
 # Relationship to the Long Animation Frames (LoAF) API
