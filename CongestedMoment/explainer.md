@@ -29,6 +29,9 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
   - [A single LoAF entry cannot represent a congested moment](#a-single-loaf-entry-cannot-represent-a-congested-moment)
   - [Limited attribution of non-task delays](#limited-attribution-of-non-task-delays)
 - [Relationship to the Delayed Message Timing API](#relationship-to-the-delayed-message-timing-api)
+  - [Broadening the scope: from individual messages to congested intervals](#broadening-the-scope-from-individual-messages-to-congested-intervals)
+  - [Preserving per-message timing as part of `EventTiming`](#preserving-per-message-timing-as-part-of-eventtiming)
+  - [Complementary roles: per-message and interval-level](#complementary-roles-per-message-and-interval-level)
 - [Alternatives Considered](#alternatives-considered)
   - [DevTools Tracing](#devtools-tracing)
   - [Manual Instrumentation / Polyfills](#manual-instrumentation--polyfills)
@@ -772,12 +775,16 @@ The [Delayed Message Timing API](https://github.com/WICG/delayed-message-timing)
 
 The Congested Moment API builds on that foundation, but broadens the scope from **individual delayed messages** to **periods of sustained congestion within an execution context**.
 
-This change reflects two observations:
+## Broadening the scope: from individual messages to congested intervals
+
+Focusing on individual message deliveries has two limitations:
 
 * Delayed `message` events are only one manifestation of congestion. The same overloaded execution context can also delay other runnable work, such as input events, timers, rendering-related tasks, or other queued callbacks.
 * Looking at messages one by one can fragment diagnosis. In practice, multiple adjacent delayed messages are often symptoms of the same underlying cause, such as a long-running script, repeated medium-length tasks, heavy microtask processing, garbage collection, or serialization/deserialization overhead.
 
 For this reason, this proposal shifts the primary unit of observation from the **individual delayed message** to the **congested interval** that caused the delay.
+
+## Preserving per-message timing as part of `EventTiming`
 
 At the same time, the message-timing concepts introduced by the Delayed Message Timing API remain important. Message delivery still needs end-to-end timing and attribution, including:
 
@@ -789,7 +796,9 @@ At the same time, the message-timing concepts introduced by the Delayed Message 
 
 Rather than defining a separate delayed-message-specific performance entry, this proposal incorporates those concepts into **`PerformanceMessageEventTiming`**, treating `message` delivery as a specialized form of event timing. This aligns the model more closely with the broader event timing ecosystem, while still exposing the message-specific fields needed for cross-context diagnostics.
 
-In this model:
+## Complementary roles: per-message and interval-level
+
+The two entry types serve complementary roles:
 
 * **`PerformanceMessageEventTiming`** provides per-message timing and attribution.
 * **`PerformanceCongestedMomentTiming`** provides interval-level attribution for sustained congestion and can include delayed `message` events alongside other affected work.
