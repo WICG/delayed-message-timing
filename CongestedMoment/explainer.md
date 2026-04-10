@@ -25,11 +25,9 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
   - [Message Event Entry Structure](#message-event-entry-structure)
   - [`PerformanceMessageScriptInfo` and `PerformanceExecutionContextInfo`](#performancemessagescriptinfo-and-performanceexecutioncontextinfo)
 - [Relationship to the Long Animation Frames (LoAF) API](#relationship-to-the-long-animation-frames-loaf-api)
-  - [Limitations of LoAF](#limitations-of-loaf)
-    - [1. Frame-oriented rather than queue-oriented](#1-frame-oriented-rather-than-queue-oriented)
-    - [2. Limited visibility into non-rendering contexts](#2-limited-visibility-into-non-rendering-contexts)
-    - [3. Insufficient representation of sustained congestion](#3-insufficient-representation-of-sustained-congestion)
-    - [4. Limited attribution of non-task delays](#4-limited-attribution-of-non-task-delays)
+  - [Not directly applicable to non-rendering contexts](#not-directly-applicable-to-non-rendering-contexts)
+  - [A single LoAF entry cannot represent a congested moment](#a-single-loaf-entry-cannot-represent-a-congested-moment)
+  - [Limited attribution of non-task delays](#limited-attribution-of-non-task-delays)
 - [Relationship to the Delayed Message Timing API](#relationship-to-the-delayed-message-timing-api)
 - [Alternatives Considered](#alternatives-considered)
   - [DevTools Tracing](#devtools-tracing)
@@ -731,37 +729,32 @@ The Long Animation Frames (LoAF) API provides visibility into long animation fra
 
 While LoAF is effective for diagnosing rendering-related performance issues, it does not fully capture all forms of responsiveness degradation.
 
-## Limitations of LoAF
+## Not directly applicable to non-rendering contexts
 
-### 1. Frame-oriented rather than queue-oriented
+LoAF is semantically and architecturally tied to the rendering pipeline. Its name ("Long Animation Frames") and several of its properties, including `renderStart`, `styleAndLayoutStart`, and `firstUIEventTimestamp`, are specific to the rendering context and have no meaning in a web worker, where no animation frames are produced and no rendering pipeline exists.
 
-LoAF is centered around animation frames and reports work that contributes to long frame durations. However, many responsiveness issues arise from delays in processing runnable tasks, rather than slow frame production.
+Beyond naming, LoAF's 50ms threshold is not appropriate for web workers. Web workers are specifically designed to run longer-duration tasks in order to offload work from the main thread. Applying a 50ms threshold in that context would produce entries even when there is no real responsiveness problem.
 
-For example:
+## A single LoAF entry cannot represent a congested moment
 
-* A task may be delayed significantly before it begins execution
-* Multiple moderate-duration tasks may accumulate and delay subsequent work
+LoAF is frame-cadenced. The HTML event loop interleaves rendering opportunities between tasks: after each task completes, the browser can produce a rendering update. This creates two distinct blind spots when diagnosing congestion with LoAF.
 
-These scenarios involve **queueing delay**, which is not directly represented in LoAF.
+**Case 1: Many short tasks — LoAF reports nothing.**
+LoAF's threshold is fixed at 50ms and is calibrated for detecting slow frame production, not task queue backlog. If individual tasks are each under 50ms, every rendered frame is short and no LoAF entry is triggered, even if the task queue is severely backlogged.
 
-### 2. Limited visibility into non-rendering contexts
+For example, suppose a worker sends 100 `postMessage` calls to the main thread in rapid succession, and each message handler completes in under 5ms. Since each task is well below the 50ms threshold and a frame update can occur between tasks, LoAF would detect no delay at all. Yet the main thread has accumulated a backlog of 100 messages, and the last one must wait approximately 99 × 5ms ≈ 495ms before it can begin processing. Congested Moment would surface this as a single entry; LoAF would report nothing.
 
-LoAF primarily targets the main thread and rendering pipeline. It does not provide visibility into congestion in other execution contexts, such as web workers, where no animation frames are produced.
+**Case 2: Many long tasks — LoAF produces fragmented entries.**
+If individual tasks each exceed 50ms, each rendered frame is long enough to trigger a LoAF entry. However, each entry covers only one frame. A sustained 500ms congestion period produced by ten 60ms tasks would generate multiple LoAF entries, one per long frame, rather than a single entry representing the congestion interval as a whole. A developer would need to manually correlate those entries across time to reconstruct what Congested Moment surfaces as a single, unified signal.
 
-As a result, delays in worker message handling and backlog in cross-context communication are not observable through LoAF.
+**On adding `desiredStartTime` or similar scheduling metadata.**
+A `desiredStartTime` field on a LoAF entry would expose when the first task in a given frame was originally scheduled, allowing per-frame scheduling delay to be computed like this:
+```
+schedulingDelay = startTime - desiredStartTime
+```
+This is useful metadata, but it does not resolve the two blind spots above. In Case 1, no LoAF entries are produced at all, so there is no entry on which `desiredStartTime` could appear, meaning the scheduling delay remains invisible to the developer. In Case 2, `desiredStartTime` would appear on each fragmented entry but would still require manual correlation across entries to reconstruct the full congestion interval. Neither case produces a single entry representing the sustained backlog as a whole, which is what Congested Moment is specifically designed to provide.
 
-### 3. Insufficient representation of sustained congestion
-
-LoAF reports individual long frames but does not represent continuous periods during which an execution context remains unable to process runnable tasks.
-
-In practice, responsiveness issues often occur as:
-
-* a sequence of tasks with no idle gaps
-* sustained backlog of pending work
-
-These form a **continuous interval of congestion**, which is not captured as a single entity in LoAF.
-
-### 4. Limited attribution of non-task delays
+## Limited attribution of non-task delays
 
 LoAF attributes work within frames, primarily focusing on script execution and rendering-related tasks. However, delays may also arise from internal browser operations that are not easily attributed to a specific task.
 
