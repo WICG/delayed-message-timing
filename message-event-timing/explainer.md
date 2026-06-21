@@ -33,9 +33,169 @@ The most useful signal for diagnosing a delayed message is how long it waited in
 
 When data is passed to `postMessage()`, it is serialized on the sender side and deserialized on the receiver side. For large or complex payloads these steps can block their respective threads for a significant time. From JavaScript, serialization time can only be roughly approximated by timing the `postMessage()` call (which also includes other overhead), and deserialization timing is even less reliable—browsers may defer it until the data is first accessed, so the measured value varies across implementations. These internal operations are invisible to developers, yet they are often the real source of the delay.
 
+The following example code demonstrates the delay introduced by serializing/deserializing a large JSON object during `postMessage()`.
+
+[Link to live demo](https://wicg.github.io/delayed-message-timing/examples/serialization/)
+
+**index.html**
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>postMessage Serialization/Deserialization Performance Impact</title>
+  </head>
+  <body>
+    <button id="sendJSON">Send Large JSON (~7MB)</button>
+    <script src="main.js"></script>
+  </body>
+</html>
+```
+
+**main.js**
+
+In the main.js file, 7000 JSON objects are sent to the worker using `postMessage()`. The duration of serialization can be measured by calling `performance.now()` before and after executing `postMessage()`.
+
+```js
+const worker = new Worker("worker.js");
+
+// Generate a large JSON object to demonstrate serialization overhead
+function generateLargeJSON(size) {
+  const largeArray = [];
+  for (let i = 0; i < size; i++) {
+    largeArray.push({ 
+      id: i, 
+      name: `Item ${i}`, 
+      data: Array(1000).fill("x") // Each item contains ~1KB of string data
+    });
+  }
+  return { items: largeArray }; // Returns ~7MB object when size=7000
+}
+
+// Send a large JSON object to the worker to demonstrate serialization overhead
+function sendLargeJSON() {
+  const largeJSON = generateLargeJSON(7000); // ~7MB of data
+  console.log("[main] Dispatching a large JSON object to the worker.");
+
+  // Measure time for postMessage call (includes serialization)
+  const startTime = performance.now();
+  worker.postMessage({
+    receivedData: largeJSON,
+    startTime: startTime + performance.timeOrigin,
+  });
+  const endTime = performance.now();
+  
+  // Note: This timing includes serialization but may also include other overhead
+  console.log(
+    `[main] postMessage call duration (includes serialization): ${(endTime - startTime).toFixed(2)} ms`,
+  );
+}
+
+// Add event listener to the button
+document.getElementById("sendJSON").addEventListener("click", sendLargeJSON);
+```
+
+**worker.js**
+
+In worker.js, the duration of deserialization is estimated by calling `performance.now()` immediately before and after the first access to properties of event.data (e.g., `event.data.startTime`), as this access typically triggers the deserialization process.
+
+```js
+// Worker receives large data
+onmessage = (event) => {
+  const processingStart = event.timeStamp;
+  // Measure deserialization time by accessing the large data object
+  // Note: Deserialization typically occurs when data is first accessed (implementation-dependent)
+  const deserializationStartTime = performance.now();
+  const startTimeFromMain = event.data.startTime - performance.timeOrigin;
+  const receivedData = event.data.receivedData;
+  const deserializationEndTime = performance.now();
+  const blockedDuration = processingStart - startTimeFromMain;
+
+  console.log("[worker] Deserialized Data:", receivedData.items.length, "items.");
+  console.log(
+    "[worker] Deserialization time:",
+    (deserializationEndTime - deserializationStartTime).toFixed(2),
+    "ms",
+  );
+
+  const totalDataProcessingTime = (deserializationEndTime - startTimeFromMain); 
+  console.log("[worker] blockedDuration (including serialization):", blockedDuration.toFixed(2), "ms");
+  console.log("[worker] serialization + deserialization (estimate):", totalDataProcessingTime.toFixed(2), "ms");
+};
+```
+
+**Console logs**
+```
+[main] Dispatching a large JSON object to the worker.
+[main] postMessage call duration (~7MB object serialization): 111.20 ms
+[worker] Deserialized Data: 7000 items.
+[worker] Deserialization time: 454.40 ms
+[worker] blockedDuration (including serialization): 111.10 ms
+[worker] serialization + deserialization (estimate): 566.00 ms
+```
+As shown, serialization on the main thread (approx. 111.20 ms) occurs synchronously during the `postMessage()` call, blocking other main thread work. Similarly, deserialization on the worker thread (approx. 454.40 ms) is a significant operation that blocks the worker's event loop during message processing, delaying the execution of the `onmessage` handler and any subsequent tasks.
+
+In this example, the worker log `blockedDuration: 111.10 ms` indicates the time elapsed from when the main thread initiated the `postMessage()` (including its 111.20 ms serialization block) to when the worker's `onmessage` handler began execution. This suggests that the task queue wait time is nearly zero, and the delay is primarily caused by serialization on the sender side. However, the cost of data handling is difficult to estimate because the size of the message payload can vary depending on the scenario.
+
+
+
 ## 3. The sending and receiving contexts are not attributed
 
 Even when a delay is detected, developers cannot easily tell *which* script sent the message and *which* execution context handled it. In complex applications with multiple windows, iframes, and workers, identifying the exact source and destination of a delayed message—including the source location and the type of context (window, iframe, or worker)—is essential for diagnosis but cannot be derived from the `message` event alone.
+
+For example, consider a worker that receives requests over a `MessageChannel` from two different execution contexts—the top-level document and an embedded iframe—through separate ports.
+
+**main.js** (top-level document) — hands one port to the worker and keeps the other to send requests:
+
+```js
+const worker = new Worker("worker.js");
+
+// Connect the top-level document to the worker via a channel.
+const mainChannel = new MessageChannel();
+worker.postMessage({ type: "connect" }, [mainChannel.port2]);
+mainChannel.port1.postMessage({ query: "loadDashboard" });
+
+// The iframe sets up its own channel to the same worker (see iframe.js).
+```
+
+**iframe.js** (embedded iframe) — connects to the same worker through its own channel:
+
+```js
+// The iframe also needs a port to the worker, forwarded via the parent.
+addEventListener("message", (event) => {
+  if (event.data?.type === "workerPort") {
+    const port = event.ports[0];
+    port.postMessage({ query: "loadWidget" });
+  }
+});
+```
+
+**worker.js** — receives requests from both contexts but cannot tell them apart:
+
+```js
+onmessage = (event) => {
+  const port = event.ports[0];
+  port.onmessage = (e) => {
+    // A request arrived — but who sent it, the top-level document or the iframe?
+    // For MessagePort messages, e.source is null and e.origin is "", so the
+    // worker has no way to attribute the message to its originating context.
+    console.log("[worker] request:", e.data.query, "from:", e.source, e.origin);
+    handleRequest(e.data);
+  };
+};
+```
+
+**Console output:**
+
+```
+[worker] request: loadDashboard from: null
+[worker] request: loadWidget from: null
+```
+
+Both requests look identical at the receiver: `event.source` is `null` and `event.origin` is an empty string for `MessagePort` messages. Even for `window.postMessage`, `event.source`/`event.origin` only identify the sending *window*, not which script or execution context (and never a worker). As a result, the worker cannot determine whether a delayed request came from the main thread or the iframe, making it impossible to attribute the delay to its true origin.
+
+
 
 # Proposed Solution: PerformanceMessageEventTiming
 
