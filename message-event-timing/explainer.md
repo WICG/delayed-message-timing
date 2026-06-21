@@ -32,14 +32,11 @@ When data is passed to `postMessage()`, it is serialized on the sender side and 
 
 Even when a delay is detected, developers cannot easily tell *which* script sent the message and *which* execution context handled it. In complex applications with multiple windows, iframes, and workers, identifying the exact source and destination of a delayed message—including the source location and the type of context (window, iframe, or worker)—is essential for diagnosis but cannot be derived from the `message` event alone.
 
-`PerformanceMessageEventTiming` addresses all three problems by exposing the precise queue wait time, the serialization and deserialization durations measured by the browser, and attribution data identifying the sending and receiving scripts and their execution contexts.
+# Proposed Solution: PerformanceMessageEventTiming
 
-# Proposed Solution:  PerformanceMessageEventTiming 
+To expose the end-to-end timing of `postMessage` events, we propose **`PerformanceMessageEventTiming`**, a new interface that extends the [Event Timing API](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEventTiming).
 
-Message events contribute to execution context congestion both as sources of blocking work and as delayed tasks that accumulate in the queue. To expose their end-to-end timing, we propose **PerformanceMessageEventTiming**, a new interface that extends the [Event Timing API](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEventTiming).
-
-
-This interface allows developers to identify browser contexts or workers where `postMessage` events are significantly delayed in the task queue. It also provides detailed breakdowns of the event's lifecycle, including information about the invoker, receiver, and blocking scripts.
+This interface provides the precise queue wait time, the serialization and deserialization durations measured by the browser, and attribution data identifying the sending and receiving scripts and their execution contexts.
 
 This new interface relies on two supporting interfaces:
 
