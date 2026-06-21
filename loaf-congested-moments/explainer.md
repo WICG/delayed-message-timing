@@ -344,7 +344,7 @@ While delays in background tasks like `deleteMail` might be acceptable, delays i
 
 ## 3. Delays from browser-internal operations
 
-Some delays originate from browser-internal operations that are not directly visible as JavaScript tasks. The following examples demonstrate how microtask processing and serialization overhead can contribute to congestion.
+Some delays originate from browser-internal operations that are not directly visible as JavaScript tasks. The following example demonstrates how microtask processing can contribute to congestion. Serialization and deserialization overhead is another such source; it is covered in detail in the [MessageEvent Timing explainer](../message-event-timing/explainer.md).
 
 ### Microtask checkpoint processing
 
@@ -501,28 +501,19 @@ for (const entry of list.getEntries()) {
 
 ## `PerformanceExecutionContextInfo` Interface
 
-This interface provides information about the execution environment (context) in which a script ran. It is exposed through the `executionContext` property on each `PerformanceScriptTiming` entry.
+The `executionContext` property returns a `PerformanceExecutionContextInfo` instance, which identifies the execution context in which the script ran via its `id`, `name`, and `type` (e.g. `"main-thread"`, `"dedicated-worker"`, `"window"`, or `"iframe"`).
 
-### Instance Properties
+This interface is shared with the [MessageEvent Timing explainer](../message-event-timing/explainer.md#performancemessagescriptinfo-and-performanceexecutioncontextinfo), where it is defined in full. The same definition applies here so that execution-context attribution is consistent across both proposals.
 
-#### `PerformanceExecutionContextInfo.id`
 
-Returns a unique identifier for the execution context (e.g., a string or an integer). For example, the main thread might be `"0"`, the first worker `"1"`, and so on. These IDs are unique within the current agent cluster.
+# Relationship to the MessageEvent Timing API
 
-#### `PerformanceExecutionContextInfo.name`
+This proposal is complementary to the [MessageEvent Timing explainer](../message-event-timing/explainer.md). The two operate at different granularities:
 
-Returns the name of the execution context. For web workers, this is the name provided during instantiation (e.g., `new Worker("worker.js", { name: "MyWorker" })`). It might be empty, as the name is optional. For windows or iframes, it might be empty or derived from `window.name`.
+* **This proposal (Congested Moment / LoAF extension)** provides *interval-level* attribution: it surfaces a sustained period during which an execution context is overloaded, along with the blocking scripts responsible. It is reported via the `"long-animation-frame"` entry type.
+* **`PerformanceMessageEventTiming`** provides *per-message* timing and attribution: when a specific `postMessage` was sent, how long it waited in the queue, its serialization/deserialization cost, and which script and execution context sent and handled it. It is reported via the `"event"` entry type.
 
-#### `PerformanceExecutionContextInfo.type`
-
-Identifies the type of execution context. Possible values:
-
-  * `"main-thread"`
-  * `"dedicated-worker"`
-  * `"service-worker"`
-  * `"shared-worker"`
-  * `"window"`
-  * `"iframe"`
+When an execution context is congested, it typically delays many messages at once. This proposal explains *why the context was congested as a whole*, while `PerformanceMessageEventTiming` explains *what happened to an individual message*. Both share the `PerformanceExecutionContextInfo` interface for identifying execution contexts, keeping attribution consistent across the two.
 
 
 # References

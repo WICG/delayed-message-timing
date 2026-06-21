@@ -20,6 +20,11 @@ This will enable developers to identify delayed `postMessage` communication acro
 
 # Non-Goals
 
+* **Interval-level congestion is out of scope.** This proposal reports timing for individual `message` events, not the sustained congestion intervals that may delay them. Diagnosing a congested execution context as a whole is covered by the [Congested Moment / LoAF extension explainer](../loaf-congested-moments/explainer.md).
+* **Non-`postMessage` communication is out of scope.** This API does not provide diagnostics for:
+  * [Server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
+  * [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)
+  * [WebRTC data channels](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel)
 
 # Problems
 
@@ -295,7 +300,7 @@ const somePerformanceMessageScriptInfo = {
 
 ## Observing `PerformanceMessageEventTiming` Entries
 
-`PerformanceMessageEventTiming` entries can be observed independently of any congested moment. This is useful when a developer wants to monitor delayed messages across all contexts, with attribution details about which script sent the message and which handled it, including source location. This helps identify what kinds of messages are being delayed and where they originate.
+`PerformanceMessageEventTiming` entries can be observed independently of any [congested moment](../loaf-congested-moments/explainer.md). This is useful when a developer wants to monitor delayed messages across all contexts, with attribution details about which script sent the message and which handled it, including source location. This helps identify what kinds of messages are being delayed and where they originate.
 
 Because `PerformanceMessageEventTiming` extends `PerformanceEventTiming`, it is reported via the existing `"event"` entry type and is available in workers as well as the main thread.
 
@@ -314,7 +319,14 @@ const observer = new PerformanceObserver((list) => {
 observer.observe({ type: 'event', buffered: true, durationThreshold: 200 });
 ```
 
+# Relationship to the Congested Moment / LoAF extension
 
+This proposal is complementary to the [Congested Moment / LoAF extension explainer](../loaf-congested-moments/explainer.md). The two operate at different granularities:
+
+* **`PerformanceMessageEventTiming` (this proposal)** provides *per-message* timing and attribution: when a specific `postMessage` was sent, how long it waited in the queue, its serialization/deserialization cost, and which script and execution context sent and handled it. It is reported via the `"event"` entry type.
+* **The Congested Moment / LoAF extension** provides *interval-level* attribution: it surfaces a sustained period during which an execution context is overloaded, along with the blocking scripts responsible. It is reported via the `"long-animation-frame"` entry type.
+
+A single overloaded context can delay many messages at once. The LoAF extension explains *why the context was congested as a whole*, while `PerformanceMessageEventTiming` explains *what happened to an individual message*. The two interfaces share the `PerformanceExecutionContextInfo` interface (defined above) for identifying execution contexts, so attribution data is consistent across both.
 
 # References
 - [Event Timing API](https://w3c.github.io/event-timing/)
