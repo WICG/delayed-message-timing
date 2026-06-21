@@ -633,3 +633,12 @@ Identifies the type of execution context. Possible values:
   * `"shared-worker"`
   * `"window"`
   * `"iframe"`
+
+
+# References
+- [Event Timing API](https://w3c.github.io/event-timing/)
+- [Extending Long Tasks API to Web Workers](https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/LongTasks/explainer.md)
+- https://developer.mozilla.org/en-US/docs/Web/API/PerformanceLongTaskTiming
+- https://developer.mozilla.org/en-US/docs/Web/API/PerformanceScriptTiming
+- https://developer.mozilla.org/en-US/docs/Web/API/MessageEvent
+- https://developer.chrome.com/docs/web-platform/long-animation-frames
