@@ -1,6 +1,34 @@
 # Explainer: Extending Long Animation Frames to Detect Congested Moments in Documents and Workers
 
-Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Google) 
+Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Google)
+
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**
+
+- [Explainer: Extending Long Animation Frames to Detect Congested Moments in Documents and Workers](#explainer-extending-long-animation-frames-to-detect-congested-moments-in-documents-and-workers)
+- [Introduction](#introduction)
+- [Goals](#goals)
+- [Non-Goals](#non-goals)
+- [Problems](#problems)
+  - [1. Long-running tasks blocking the event loop](#1-long-running-tasks-blocking-the-event-loop)
+    - [Long-running JavaScript tasks](#long-running-javascript-tasks)
+  - [2. Task queue buildup from high-frequency work](#2-task-queue-buildup-from-high-frequency-work)
+    - [Concurrent task sources causing queue congestion](#concurrent-task-sources-causing-queue-congestion)
+    - [Queue buildup from high-frequency postMessage calls](#queue-buildup-from-high-frequency-postmessage-calls)
+  - [3. Delays from browser-internal operations](#3-delays-from-browser-internal-operations)
+    - [Microtask checkpoint processing](#microtask-checkpoint-processing)
+- [Proposed Solution: extending LoAF](#proposed-solution-extending-loaf)
+  - [What is Congested Moment?](#what-is-congested-moment)
+  - [How to use the API](#how-to-use-the-api)
+  - [Congested Moment Entry Structure](#congested-moment-entry-structure)
+  - [The `cadence` property](#the-cadence-property)
+  - [The `executionContext` property](#the-executioncontext-property)
+  - [`PerformanceExecutionContextInfo` Interface](#performanceexecutioncontextinfo-interface)
+- [Relationship to the MessageEvent Timing API](#relationship-to-the-messageevent-timing-api)
+- [References](#references)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 # Introduction
 
