@@ -561,6 +561,9 @@ const someCongestedMomentEntry = {
       // Window attribution (main thread only; null in worker contexts)
       window,             // Reference to originating same-origin window, or null
       windowAttribution,  // "self" | "descendant" | "ancestor" | "same-page" | "other"
+
+      // Details about the execution environment of the script.
+      executionContext,   // PerformanceExecutionContextInfo describing where the script ran
     }
   ],
 }
@@ -590,3 +593,43 @@ function onEntries(list) {
 ```
 
 This lets developers branch on the reporting reason without inferring it from other fields, and keeps the existing animation-frame semantics unchanged for code that ignores the new value.
+
+## The `executionContext` property
+
+Because this proposal extends LoAF to Web Workers, a single observer can receive entries whose blocking scripts ran in different execution contexts (for example, the main thread and one or more dedicated workers). The existing `window` and `windowAttribution` properties only describe same-origin windows and are `null` in worker contexts, so they cannot identify which worker a script belongs to.
+
+To close this gap, we extend each `PerformanceScriptTiming` entry in the `scripts` array with an `executionContext` property. It returns a `PerformanceExecutionContextInfo` instance describing the execution environment, document or worker, in which the script ran, allowing developers to attribute each blocking script to the specific context that produced it.
+
+```js
+for (const entry of list.getEntries()) {
+  for (const script of entry.scripts) {
+    const ctx = script.executionContext;
+    console.log(`script ran in ${ctx.type} (id=${ctx.id}, name="${ctx.name}")`);
+  }
+}
+```
+
+## `PerformanceExecutionContextInfo` Interface
+
+This interface provides information about the execution environment (context) in which a script ran. It is exposed through the `executionContext` property on each `PerformanceScriptTiming` entry.
+
+### Instance Properties
+
+#### `PerformanceExecutionContextInfo.id`
+
+Returns a unique identifier for the execution context (e.g., a string or an integer). For example, the main thread might be `"0"`, the first worker `"1"`, and so on. These IDs are unique within the current agent cluster.
+
+#### `PerformanceExecutionContextInfo.name`
+
+Returns the name of the execution context. For web workers, this is the name provided during instantiation (e.g., `new Worker("worker.js", { name: "MyWorker" })`). It might be empty, as the name is optional. For windows or iframes, it might be empty or derived from `window.name`.
+
+#### `PerformanceExecutionContextInfo.type`
+
+Identifies the type of execution context. Possible values:
+
+  * `"main-thread"`
+  * `"dedicated-worker"`
+  * `"service-worker"`
+  * `"shared-worker"`
+  * `"window"`
+  * `"iframe"`
