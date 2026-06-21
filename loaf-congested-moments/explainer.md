@@ -421,6 +421,8 @@ The following example demonstrates how chained Promise reactions can delay a `me
 
 # Proposed Solution: extending LoAF
 
+The problems above share a common root cause: an execution context's task queue becomes a bottleneck, so runnable work is delayed regardless of whether the cause is a single long task or a flood of tiny ones. This section defines the **congested moment** that captures such a period, explains why we report it by extending the Long Animation Frame (LoAF) API rather than introducing a new one, and describes how the extension works.
+
 ## What is Congested Moment?
 
 A **Congested Moment** is a time interval during which an execution context, such as the main thread or a web worker, is persistently overloaded and unable to process events in a timely manner.
@@ -431,6 +433,29 @@ More precisely, a Congested Moment is a continuous time interval where:
    (e.g. MessageEvent, UIEvent, StorageEvent, FetchEvent).
 2. Event handling is blocked by one or more long-running tasks or equivalent delays.
 3. The interval ends when **no runnable tasks remain pending**.
+
+## Why extend LoAF instead of creating a new performance API?
+
+Detecting a long animation frame and detecting a congested moment are fundamentally the same task: both observe a bottleneck in the message queue and help developers find its cause, whether that is a long task or a large number of tiny tasks. They differ only in the symptom each one surfaces:
+
+- A **long animation frame** is reported when an animation frame takes longer than 50ms, typically because the main thread is busy with tasks (such as a long task) that delay the frame's rendering update. It is anchored to a single frame on the main thread.
+- A **congested moment** is reported when message processing is delayed beyond a threshold (e.g., 200ms). This delay can be caused not only by a long task but also by a flood of small tasks.
+
+Because LoAF is frame-anchored, it cannot capture the second case. Consider a burst of short tasks of just 2–3ms each that floods the task queue. Because a frame can update between those tasks and no single frame crosses 50ms, LoAF never fires, even though tasks are continuously delayed and the queue keeps growing. A single LoAF entry also maps to one frame, so it cannot represent a congested period that spans many frames.
+
+Since the two concepts diagnose the same class of problem, we extend LoAF rather than add a separate API: a congested moment is reported as an additional reporting cadence, alongside the existing animation-frame cadence. This lets developers use a single, familiar API to observe both symptoms, and it brings LoAF coverage to Web Workers, which have none today.
+
+## Long Animation Frame vs. Congested Moment
+
+| | Long Animation Frame | Congested Moment |
+| --- | --- | --- |
+| **What it reports** | A frame whose work exceeds the threshold | A sustained period in which the task queue stays congested |
+| **Trigger threshold** | Frame update delayed > 50ms | A runnable task delayed beyond the threshold (e.g., 200ms) |
+| **Typical cause** | A long task delaying the frame's rendering update | A long task *or* many small tasks flooding the queue |
+| **Reporting unit** | One entry per frame | One entry spanning the whole congested interval (may cover many frames) |
+| **Anchored to rendering** | Yes | No |
+| **Available contexts** | Documents, plus Web Workers that drive an OffscreenCanvas (rendering frames) | Documents and Web Workers |
+| **`cadence` value** | `"animation-frame"` | `"congested-moment"` |
 
 ## How to use the API
 
