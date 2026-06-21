@@ -4,7 +4,7 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
 
 # Introduction
 
-Modern web applications run across multiple execution contexts, such as documents, iframes, and workers, each of which processes a stream of tasks including user input, timers, rendering updates, and `postMessage` communication. Responsiveness depends on these tasks running on time. In practice, however, a task queue can become *congested*, where tasks pile up faster than they can be drained because of long-running tasks, a high task arrival rate, or internal browser operations. When this happens, the page feels sluggish: updates are delayed, and in a worker, a `postMessage` is not handled promptly, so important work such as reading data from IndexedDB is held back.
+Modern web applications run across multiple execution contexts, such as documents, iframes, and workers, each of which processes a stream of tasks. Responsiveness depends on these tasks running on time, but in practice a task queue can become *congested* when tasks pile up faster than they can be drained. When this happens, the page feels sluggish and important work is delayed.
 
 Today's web performance APIs cannot reliably surface this problem. The Long Animation Frame (LoAF) and Long Tasks APIs run only on the main thread and are anchored to rendering: LoAF reports a frame only when it exceeds the 50ms threshold. Consider a burst of short tasks of just 2–3ms each that floods the task queue. Because a frame can update between those tasks and no single frame crosses 50ms, LoAF never fires, even though tasks are continuously delayed and the queue keeps growing. A single LoAF entry also maps to one frame, so it cannot represent a congested period that spans many frames. As a result, there is no way to observe sustained congestion, and workers have no LoAF coverage at all.
 
@@ -17,13 +17,13 @@ Rather than introduce a separate API, this explainer proposes to **extend the Lo
 
 The goal of this proposal is to extend the Long Animation Frame API so that developers can observe sustained task-queue congestion, in both documents and Web Workers, without manual instrumentation. Concretely, we aim to:
 
-1. **Report a congested moment as a LoAF entry.** Introduce a *congested moment* as an additional reporting cadence, alongside the existing animation-frame cadence. A congested moment is reported as a single entry spanning the interval from when a task is first delayed beyond a threshold (e.g., 200ms) until the task queue is fully drained, capturing the whole period of sustained delay regardless of how many frames are rendered within it.
+* **Report a congested moment as a LoAF entry.** Introduce a *congested moment* as an additional reporting cadence, alongside the existing animation-frame cadence. A congested moment is reported as a single entry spanning the interval from when a task is first delayed beyond a threshold (e.g., 200ms) until the task queue is fully drained, capturing the whole period of sustained delay regardless of how many frames are rendered within it.
 
-2. **Support Web Workers.** Make LoAF available in Web Worker contexts, using the congested moment as the criterion for generating entries. When a Web Worker drives an OffscreenCanvas, its LoAF should additionally follow the main thread's frame-based (rAF) cadence so that rendering latency remains measurable.
+* **Support Web Workers.** Make LoAF available in Web Worker contexts, using the congested moment as the criterion for generating entries. When a Web Worker drives an OffscreenCanvas, its LoAF should additionally follow the main thread's frame-based (rAF) cadence so that rendering latency remains measurable.
 
-3. **Allow a customizable threshold.** Let observers configure `durationThreshold` so reporting sensitivity can be tuned per context, for example, a longer threshold for heavy background processing versus a shorter one for a high-performance game engine.
+* **Allow a customizable threshold.** Let observers configure `durationThreshold` so reporting sensitivity can be tuned per context, for example, a longer threshold for heavy background processing versus a shorter one for a high-performance game engine.
 
-4. **Expose congestion-attribution properties.** Add a `scriptCount` property that counts all JS entry points within the interval, making it easy to distinguish a single long task (low count) from queue congestion (high count). Also expose a property (e.g., `cadence` or `trigger`, with values such as `"animation-frame"` or `"congested-moment"`) so developers can tell which cadence produced a given entry.
+* **Expose congestion-attribution properties.** Add a `scriptCount` property that counts all JS entry points within the interval, making it easy to distinguish a single long task (low count) from queue congestion (high count). Also expose a property (e.g., `cadence` or `trigger`, with values such as `"animation-frame"` or `"congested-moment"`) so developers can tell which cadence produced a given entry.
 
 # Non-Goals
 
@@ -32,11 +32,9 @@ The goal of this proposal is to extend the Long Animation Frame API so that deve
 
 # Problems
 
-Users may experience delays in rendering or interaction, such as content not updating promptly after user input. These delays often occur when an execution context becomes congested and is unable to process events or messages in a timely manner.
+Each execution context processes a stream of tasks, including user input, timers, rendering updates, and `postMessage` communication. When a context becomes congested, it can no longer process these tasks, events, or messages in a timely manner. Users then experience delays in rendering or interaction, such as content not updating promptly after user input. In a worker, a `postMessage` may not be handled promptly, so important work such as reading data from IndexedDB is held back.
 
-Congestion may arise from various sources, including long-running tasks, a high rate of incoming tasks, or internal browser operations. Understanding the causes of such congestion, as well as which events are affected, is essential for diagnosing and improving application responsiveness.
-
-We can categorize the problems into three types:
+Congestion may arise from various sources, including long-running tasks, a high rate of incoming tasks, or internal browser operations. Understanding the causes of such congestion, as well as which events are affected, is essential for diagnosing and improving application responsiveness. We can categorize the problems into three types:
 
 **1. Long-running tasks blocking the event loop**
 
