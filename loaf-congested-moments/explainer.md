@@ -34,9 +34,9 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
 
 Modern web applications run across multiple execution contexts, such as documents, iframes, and workers, each of which processes a stream of tasks. Responsiveness depends on these tasks running on time, but in practice a task queue can become *congested* when tasks pile up faster than they can be drained. When this happens, the page feels sluggish and important work is delayed.
 
-Today's web performance APIs cannot reliably surface this problem. The Long Animation Frame (LoAF) and Long Tasks APIs run only on the main thread and are anchored to rendering: LoAF reports a frame only when it exceeds the 50ms threshold. Consider a burst of short tasks of just 2–3ms each that floods the task queue. Because a frame can update between those tasks and no single frame crosses 50ms, LoAF never fires, even though tasks are continuously delayed and the queue keeps growing. A single LoAF entry also maps to one frame, so it cannot represent a congested period that spans many frames. As a result, there is no way to observe sustained congestion, and workers have no LoAF coverage at all.
+Today's web performance APIs cannot reliably surface this problem. The Long Animation Frame (LoAF) and Long Tasks APIs run only on the main thread and are anchored to rendering, reporting a frame only when it exceeds the 50ms threshold. As a result, they miss congestion that builds from many short tasks (none long enough to cross that threshold), cannot represent a congested period that spans many frames, and offer no coverage in workers at all.
 
-We define a **congested moment** as the interval from the point a task is first delayed beyond a threshold (e.g., 200ms) until the task queue is fully drained, reported as a single entry. This captures the whole period of sustained delay regardless of how many frames are rendered within it.
+We address this by defining a **congested moment**: a sustained interval during which the task queue stays congested, reported as a single entry regardless of how many frames it spans. (See [What is Congested Moment?](#what-is-congested-moment) for the precise definition.)
 
 Rather than introduce a separate API, this explainer proposes to **extend the Long Animation Frame API** to report congested moments as an additional cadence, alongside the existing animation-frame cadence, and to make LoAF available in Web Workers. With this extension, developers can detect periods of persistent congestion and pinpoint their sources, on both the main thread and in workers, using a single familiar API and without manual instrumentation.
 
@@ -45,7 +45,7 @@ Rather than introduce a separate API, this explainer proposes to **extend the Lo
 
 The goal of this proposal is to extend the Long Animation Frame API so that developers can observe sustained task-queue congestion, in both documents and Web Workers, without manual instrumentation. Concretely, we aim to:
 
-* **Report a congested moment as a LoAF entry.** Introduce a *congested moment* as an additional reporting cadence, alongside the existing animation-frame cadence. A congested moment is reported as a single entry spanning the interval from when a task is first delayed beyond a threshold (e.g., 200ms) until the task queue is fully drained, capturing the whole period of sustained delay regardless of how many frames are rendered within it.
+* **Report a congested moment as a LoAF entry.** Introduce a *congested moment* as an additional reporting cadence, alongside the existing animation-frame cadence. It is reported as a single entry spanning the whole congested interval, regardless of how many frames are rendered within it.
 
 * **Support Web Workers.** Make LoAF available in Web Worker contexts, using the congested moment as the criterion for generating entries. When a Web Worker drives an OffscreenCanvas, its LoAF should additionally follow the main thread's frame-based (rAF) cadence so that rendering latency remains measurable.
 
