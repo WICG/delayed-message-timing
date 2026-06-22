@@ -566,6 +566,14 @@ This proposal is complementary to the [MessageEvent Timing explainer](../message
 
 When an execution context is congested, it typically delays many messages at once. This proposal explains *why the context was congested as a whole*, while `PerformanceMessageEventTiming` explains *what happened to an individual message*. Both share the `PerformanceExecutionContextInfo` interface for identifying execution contexts, keeping attribution consistent across the two.
 
+# Related Discussion, Articles, and Browser Issues
+
+- **Chromium Issue:** [Support Long Tasks API in workers](https://issues.chromium.org/issues/41399667)
+  Web developers are interested in extending the Long Tasks API to monitor delayed execution in web workers. Unlike the Long Animation Frames (LoAF) API, the current Long Tasks API lacks script attribution, making it harder to trace the source of delays.
+
+# Acknowledgements
+
+Thank you to Abhishek Shanthkumar, Alex Russell, Andy Luhrs, Dave Meyers, Ethan Bernstein, Evan Stade, Jared Mitchell, Luis Pardo, Michal Mocny, Noam Helfman, Noam Rosenthal, Sam Fortiner, Samuele Carpineti, Steve Becker, Yoav Weiss, Yehor Lvivski for their valuable feedback and advice.
 
 # References
 - [Event Timing API](https://w3c.github.io/event-timing/)
