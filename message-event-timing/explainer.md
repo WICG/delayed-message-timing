@@ -1,6 +1,32 @@
+
 # Explainer: Exposing MessageEvent Timing via the Event Timing API
 
 Author: [Joone Hur](https://github.com/joone) (Microsoft), Michal Mocny (Google) 
+
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents** 
+
+- [Explainer: Exposing MessageEvent Timing via the Event Timing API](#explainer-exposing-messageevent-timing-via-the-event-timing-api)
+- [Introduction](#introduction)
+- [Goals](#goals)
+- [Non-Goals](#non-goals)
+- [Problems](#problems)
+  - [1. Queue wait time (`blockedDuration`) is hard to measure accurately](#1-queue-wait-time-blockedduration-is-hard-to-measure-accurately)
+  - [2. Serialization and deserialization costs are not observable](#2-serialization-and-deserialization-costs-are-not-observable)
+  - [3. The sending and receiving contexts are not attributed](#3-the-sending-and-receiving-contexts-are-not-attributed)
+- [Proposed Solution: PerformanceMessageEventTiming](#proposed-solution-performancemessageeventtiming)
+  - [Message Event Entry Structure](#message-event-entry-structure)
+  - [`PerformanceMessageScriptInfo` and `PerformanceExecutionContextInfo`](#performancemessagescriptinfo-and-performanceexecutioncontextinfo)
+  - [Observing `PerformanceMessageEventTiming` Entries](#observing-performancemessageeventtiming-entries)
+  - [Example: diagnosing the large-JSON case](#example-diagnosing-the-large-json-case)
+- [Relationship to the Congested Moment / LoAF extension](#relationship-to-the-congested-moment--loaf-extension)
+- [Related Discussion, Articles, and Browser Issues](#related-discussion-articles-and-browser-issues)
+- [Privacy and Security Considerations](#privacy-and-security-considerations)
+- [Acknowledgements](#acknowledgements)
+- [References](#references)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 # Introduction
 
@@ -317,6 +343,34 @@ const observer = new PerformanceObserver((list) => {
 observer.observe({ type: 'event', buffered: true, durationThreshold: 200 });
 ```
 
+## Example: diagnosing the large-JSON case
+
+Recall the [serialization example](#2-serialization-and-deserialization-costs-are-not-observable), where a ~7MB JSON object was sent to a worker. With manual instrumentation the developer could only estimate a combined cost. With `PerformanceMessageEventTiming`, the worker's observer receives an entry that isolates each phase:
+
+```js
+{
+  entryType: "event",
+  name: "message",
+  startTime: 1240.0,        // postMessage() called on the main thread
+  sentTime: 1351.2,         // message enqueued in the worker (after ~111ms serialization)
+  processingStart: 1351.4,  // onmessage began
+  processingEnd: 1806.0,    // onmessage finished
+  duration: 566.0,          // startTime → processingEnd
+
+  blockedDuration: 0.2,     // pure queue wait (sentTime → processingStart)
+  serialization: 111.2,     // measured on the sender side
+  deserialization: 454.4,   // measured on the receiver side
+
+  messageType: "cross-worker-document",
+  invoker:  { sourceURL: "https://example.com/main.js",   sourceFunctionName: "sendLargeJSON",
+              executionContext: { id: 0, type: "main-thread" } },
+  receiver: { sourceURL: "https://example.com/worker.js", sourceFunctionName: "onmessage",
+              executionContext: { id: 1, type: "dedicated-worker", name: "" } },
+}
+```
+
+The entry makes the diagnosis immediate: `blockedDuration` is near zero, so the message did not wait in the queue; the 566ms delay is almost entirely serialization (111ms on the sender) and deserialization (454ms on the receiver), with full attribution to the sending and receiving scripts.
+
 # Relationship to the Congested Moment / LoAF extension
 
 This proposal is complementary to the [Congested Moment / LoAF extension explainer](../loaf-congested-moments/explainer.md). The two operate at different granularities:
@@ -333,6 +387,15 @@ A single overloaded context can delay many messages at once. The LoAF extension 
 
 - **Article:** [Is postMessage slow?](https://surma.dev/things/is-postmessage-slow/)
   This article explains how serialization and deserialization are major sources of delay in `postMessage()` usage. While `SharedArrayBuffer` can eliminate copying overhead via shared memory, its real-world usage is limited due to strict security constraints and the complexity of manual memory management.
+
+# Privacy and Security Considerations
+
+`PerformanceMessageEventTiming` exposes end-to-end timing and script attribution for `postMessage`, which requires care to avoid leaking cross-origin information:
+
+- **Same-origin attribution only.** `PerformanceMessageScriptInfo` fields (`sourceURL`, `sourceFunctionName`, `sourceCharPosition`, line/column) are populated only when the script is same-origin with the observing context. For cross-origin senders or receivers these fields are omitted, and only coarse metadata (e.g., the context `type`) is exposed.
+- **Serialization/deserialization timing.** These durations are measured on the observer's own thread for messages it sends or receives; they do not reveal the internal timing of a cross-origin context.
+- **`traceId` correlation.** `traceId` correlates the sender and receiver entries only when both contexts are same-origin; it is not exposed across origins, so it cannot be used to link activity between unrelated origins.
+- **Timestamp coarsening.** Timestamps follow the same resolution-clamping protections as the rest of the Event Timing API to mitigate high-resolution timing attacks.
 
 # Acknowledgements
 
