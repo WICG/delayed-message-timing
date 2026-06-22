@@ -144,7 +144,7 @@ onmessage = (event) => {
 As shown, serialization on the main thread (approx. 111.20 ms) occurs synchronously during the `postMessage()` call, blocking other main thread work. Similarly, deserialization on the worker thread (approx. 454.40 ms) is a significant operation that blocks the worker's event loop during message processing, delaying the execution of the `onmessage` handler and any subsequent tasks.
 
 In this example, the worker log `blockedDuration: 111.10 ms` indicates the time elapsed from when the main thread initiated the `postMessage()` (including its 111.20 ms serialization block) to when the worker's `onmessage` handler began execution. This suggests that the task queue wait time is nearly zero, and the delay is primarily caused by serialization on the sender side. However, the cost of data handling is difficult to estimate because the size of the message payload can vary depending on the scenario.
-
+> **Note on naming:** the `blockedDuration` computed manually in this example is **not** the same as the `blockedDuration` exposed by the proposed API. The manual value spans from the sender's `postMessage()` call and therefore includes serialization and sender-side time, whereas the API's `blockedDuration` measures only the *pure* queue wait (`sentTime → processingStart`), with serialization and deserialization reported separately.
 ## 3. The sending and receiving contexts are not attributed
 
 Even when a delay is detected, developers cannot easily tell *which* script sent the message and *which* execution context handled it. In complex applications with multiple windows, iframes, and workers, identifying the exact source and destination of a delayed message—including the source location and the type of context (window, iframe, or worker)—is essential for diagnosis but cannot be derived from the `message` event alone.
@@ -272,6 +272,8 @@ const someMessageEventEntry = {
   receiver  // Details about the script handling the message
 }
 ```
+
+All timestamps in the entry (`startTime`, `sentTime`, `processingStart`, `processingEnd`) are reported on the **receiving context's** performance timeline — the same timeline as the observing `PerformanceObserver` — so they are directly comparable even when `postMessage()` was called in a different context with a different `timeOrigin`. The browser performs this normalization internally using a shared monotonic clock, which is exactly what manual instrumentation (comparing timestamps taken in two contexts) cannot do reliably.
 
 ## `PerformanceMessageScriptInfo` and `PerformanceExecutionContextInfo`
 

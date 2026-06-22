@@ -51,7 +51,7 @@ The goal of this proposal is to extend the Long Animation Frame API so that deve
 
 * **Allow a customizable threshold.** Let observers configure `durationThreshold` so reporting sensitivity can be tuned per context, for example, a longer threshold for heavy background processing versus a shorter one for a high-performance game engine.
 
-* **Expose congestion-attribution properties.** Add a `scriptCount` property that counts all JS entry points within the interval, making it easy to distinguish a single long task (low count) from queue congestion (high count). Also expose a property (e.g., `cadence` or `trigger`, with values such as `"animation-frame"` or `"congested-moment"`) so developers can tell which cadence produced a given entry.
+* **Expose congestion-attribution properties.** Add a `scriptCount` property that counts all JS entry points within the interval, making it easy to distinguish a single long task (low count) from queue congestion (high count). Also expose a `cadence` property (with values such as `"animation-frame"` or `"congested-moment"`) so developers can tell which cadence produced a given entry.
 
 # Non-Goals
 
@@ -425,13 +425,13 @@ The problems above share a common root cause: an execution context's task queue 
 
 ## What is Congested Moment?
 
-A **Congested Moment** is a time interval during which an execution context, such as the main thread or a web worker, is persistently overloaded and unable to process events in a timely manner.
+A **congested moment** is a time interval during which an execution context, such as the main thread or a web worker, is persistently overloaded and unable to process events in a timely manner.
 
-More precisely, a Congested Moment is a continuous time interval where:
+More precisely, a congested moment is a continuous time interval where:
 
 1. At least one _runnable_ task is pending (spent more than 200ms in the message queue)
    (e.g. MessageEvent, UIEvent, StorageEvent, FetchEvent).
-2. Event handling is blocked by one or more long-running tasks or equivalent delays.
+2. The event loop is saturated so that pending tasks cannot be dispatched — whether by one or more long-running tasks, a high volume of small tasks, or browser-internal operations (e.g., long microtask checkpoints).
 3. The interval ends when **no runnable tasks remain pending**.
 
 ## Why extend LoAF instead of creating a new performance API?
