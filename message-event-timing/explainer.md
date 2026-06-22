@@ -28,7 +28,9 @@ This will enable developers to identify delayed `postMessage` communication acro
 
 # Problems
 
-When a `postMessage` event is delayed, developers can detect *that* a delay happened, but pinpointing *why* is difficult with current tools. A delay can stem from the receiver's thread being busy with a long task, from task queue congestion, or from serialization/deserialization overhead. The information needed to distinguish these causes is either impossible or impractical to obtain from JavaScript.
+When a `postMessage` is delayed, developers can detect *that* something was slow, but the per-message details needed to act on it are not exposed. To diagnose a delayed message, a developer needs to know **which** message was delayed, **how long it waited** in the receiver's task queue before its handler ran, **how long the handler itself took**, and **how much of the cost came from serializing and deserializing** the payload. Today none of these can be obtained reliably without manual instrumentation, and even then the measurements are error-prone.
+
+This explainer focuses on that *per-message* visibility. Diagnosing why an execution context is congested as a whole — for example, a long task or a flood of small tasks blocking the event loop — is a separate, interval-level concern covered by the [Congested Moment / LoAF extension explainer](../loaf-congested-moments/explainer.md). The two are complementary: this proposal explains *what happened to an individual message*, while the LoAF extension explains *why the context was congested*.
 
 ## 1. Queue wait time (`blockedDuration`) is hard to measure accurately
 
@@ -143,8 +145,6 @@ As shown, serialization on the main thread (approx. 111.20 ms) occurs synchron
 
 In this example, the worker log `blockedDuration: 111.10 ms` indicates the time elapsed from when the main thread initiated the `postMessage()` (including its 111.20 ms serialization block) to when the worker's `onmessage` handler began execution. This suggests that the task queue wait time is nearly zero, and the delay is primarily caused by serialization on the sender side. However, the cost of data handling is difficult to estimate because the size of the message payload can vary depending on the scenario.
 
-
-
 ## 3. The sending and receiving contexts are not attributed
 
 Even when a delay is detected, developers cannot easily tell *which* script sent the message and *which* execution context handled it. In complex applications with multiple windows, iframes, and workers, identifying the exact source and destination of a delayed message—including the source location and the type of context (window, iframe, or worker)—is essential for diagnosis but cannot be derived from the `message` event alone.
@@ -200,8 +200,6 @@ onmessage = (event) => {
 
 Both requests look identical at the receiver: `event.source` is `null` and `event.origin` is an empty string for `MessagePort` messages. Even for `window.postMessage`, `event.source`/`event.origin` only identify the sending *window*, not which script or execution context (and never a worker). As a result, the worker cannot determine whether a delayed request came from the main thread or the iframe, making it impossible to attribute the delay to its true origin.
 
-
-
 # Proposed Solution: PerformanceMessageEventTiming
 
 To expose the end-to-end timing of `postMessage` events, we propose **`PerformanceMessageEventTiming`**, a new interface that extends the [Event Timing API](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEventTiming).
@@ -243,8 +241,6 @@ classDiagram
     PerformanceEntry <|-- PerformanceEventTiming
     PerformanceEventTiming <|-- PerformanceMessageEventTiming
 ```
-
-
 
 ```js
 const someMessageEventEntry = {
@@ -327,6 +323,18 @@ This proposal is complementary to the [Congested Moment / LoAF extension explain
 * **The Congested Moment / LoAF extension** provides *interval-level* attribution: it surfaces a sustained period during which an execution context is overloaded, along with the blocking scripts responsible. It is reported via the `"long-animation-frame"` entry type.
 
 A single overloaded context can delay many messages at once. The LoAF extension explains *why the context was congested as a whole*, while `PerformanceMessageEventTiming` explains *what happened to an individual message*. The two interfaces share the `PerformanceExecutionContextInfo` interface (defined above) for identifying execution contexts, so attribution data is consistent across both.
+
+# Related Discussion, Articles, and Browser Issues
+
+- **Chromium Issue:** [postMessage between Trello and iframes timing out more frequently](https://issues.chromium.org/issues/40723533)
+  This issue highlights increasing latency in `postMessage` communication between Trello and embedded iframes, suggesting a need for better diagnostics around message delivery delays.
+
+- **Article:** [Is postMessage slow?](https://surma.dev/things/is-postmessage-slow/)
+  This article explains how serialization and deserialization are major sources of delay in `postMessage()` usage. While `SharedArrayBuffer` can eliminate copying overhead via shared memory, its real-world usage is limited due to strict security constraints and the complexity of manual memory management.
+
+# Acknowledgements
+
+Thank you to Abhishek Shanthkumar, Alex Russell, Andy Luhrs, Dave Meyers, Ethan Bernstein, Evan Stade, Jared Mitchell, Luis Pardo, Michal Mocny, Noam Helfman, Noam Rosenthal, Sam Fortiner, Samuele Carpineti, Steve Becker, Yoav Weiss, Yehor Lvivski for their valuable feedback and advice.
 
 # References
 - [Event Timing API](https://w3c.github.io/event-timing/)
