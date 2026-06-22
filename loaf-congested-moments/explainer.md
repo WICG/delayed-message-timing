@@ -6,7 +6,6 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**
 
-- [Explainer: Extending Long Animation Frames to Detect Congested Moments in Documents and Workers](#explainer-extending-long-animation-frames-to-detect-congested-moments-in-documents-and-workers)
 - [Introduction](#introduction)
 - [Goals](#goals)
 - [Non-Goals](#non-goals)
@@ -20,12 +19,19 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
     - [Microtask checkpoint processing](#microtask-checkpoint-processing)
 - [Proposed Solution: extending LoAF](#proposed-solution-extending-loaf)
   - [What is Congested Moment?](#what-is-congested-moment)
+  - [Why extend LoAF instead of creating a new performance API?](#why-extend-loaf-instead-of-creating-a-new-performance-api)
+  - [Long Animation Frame vs. Congested Moment](#long-animation-frame-vs-congested-moment)
   - [How to use the API](#how-to-use-the-api)
   - [Congested Moment Entry Structure](#congested-moment-entry-structure)
+  - [The `scriptCount` property](#the-scriptcount-property)
   - [The `cadence` property](#the-cadence-property)
   - [The `executionContext` property](#the-executioncontext-property)
   - [`PerformanceExecutionContextInfo` Interface](#performanceexecutioncontextinfo-interface)
+  - [Example: diagnosing congestion from a flood of small tasks](#example-diagnosing-congestion-from-a-flood-of-small-tasks)
 - [Relationship to the MessageEvent Timing API](#relationship-to-the-messageevent-timing-api)
+- [Related Discussion, Articles, and Browser Issues](#related-discussion-articles-and-browser-issues)
+- [Privacy and Security Considerations](#privacy-and-security-considerations)
+- [Acknowledgements](#acknowledgements)
 - [References](#references)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -56,6 +62,9 @@ The goal of this proposal is to extend the Long Animation Frame API so that deve
 # Non-Goals
 
 - This API is intended for **post-hoc observation** (logging and diagnosing congestion after it occurs), not for providing a real-time back-off or scheduling-control mechanism.
+- It is **not a replacement for the Long Tasks API or the existing animation-frame LoAF reporting**; the congested-moment cadence is added alongside them.
+- **Per-message attribution is out of scope.** Identifying which individual `postMessage` was delayed, and its serialization/deserialization cost, is covered by the [MessageEvent Timing explainer](../message-event-timing/explainer.md).
+- **Cross-origin attribution is out of scope.** Scripts and execution contexts that are not same-origin with the observer are not exposed in detail; see [Privacy and Security Considerations](#privacy-and-security-considerations).
 
 
 # Problems
@@ -510,6 +519,17 @@ const someCongestedMomentEntry = {
 }
 ```
 
+## The `scriptCount` property
+
+`scriptCount` reports the number of JavaScript entry points (tasks that ran a script) within the congested moment. It is the key signal for distinguishing *what kind* of congestion occurred:
+
+- A **low** `scriptCount` with a long total `duration` indicates that a single long task blocked the event loop.
+- A **high** `scriptCount` indicates that the interval was congested by many short tasks piling up faster than they could drain — the case that classic LoAF and Long Tasks cannot surface.
+
+`scriptCount` counts *every* JS entry point in the interval, whereas the `scripts` array lists only those whose individual duration exceeds the per-script reporting threshold. When congestion is caused by a flood of tiny tasks (each only a few milliseconds, none over the threshold), `scripts` can be **empty** even though `scriptCount` is large. Over a congested moment of 200ms or more made up of ~2ms tasks, `scriptCount` commonly reaches several dozen and can exceed 100 while `scripts` stays empty — precisely the signature that distinguishes tiny-task congestion from a single long task.
+
+Combined with the per-script entries in `scripts`, `scriptCount` lets developers tell at a glance whether to look for one expensive function or for a high-frequency source flooding the queue.
+
 ## The `cadence` property
 
 With this proposal, a `long-animation-frame` entry can be produced by two different triggers:
@@ -556,6 +576,33 @@ The `executionContext` property returns a `PerformanceExecutionContextInfo` inst
 
 This interface is shared with the [MessageEvent Timing explainer](../message-event-timing/explainer.md#performancemessagescriptinfo-and-performanceexecutioncontextinfo), where it is defined in full. The same definition applies here so that execution-context attribution is consistent across both proposals.
 
+## Example: diagnosing congestion from a flood of small tasks
+
+Consider a worker whose queue is flooded with many small `message` handlers (each only ~2–3ms), posted faster than they can drain — the pattern from [Task queue buildup from high-frequency work](#2-task-queue-buildup-from-high-frequency-work). No single handler is long enough to register as a long task or to push an animation frame past 50ms, so classic APIs stay silent. A single congested-moment entry, however, captures the whole period:
+
+```js
+{
+  entryType: "long-animation-frame",
+  cadence: "congested-moment",
+  startTime: 1820.0,  // when the queue first stayed congested past the threshold
+  duration: 214.0,    // just over the 200ms threshold, until the queue fully drained
+
+  scriptCount: 118,   // ~118 JS entry points ran in the interval — almost all 2–3ms message handlers
+  scripts: [
+    // Only scripts that individually exceeded the per-script reporting threshold appear here;
+    // the ~2–3ms handlers are counted in scriptCount but not listed.
+    { invoker: "Worker.onmessage", sourceURL: "https://example.com/worker.js",
+      sourceFunctionName: "handleMessage", duration: 7.8,
+      executionContext: { id: 1, type: "dedicated-worker", name: "" } },
+    { invoker: "Worker.onmessage", sourceURL: "https://example.com/worker.js",
+      sourceFunctionName: "handleMessage", duration: 6.1,
+      executionContext: { id: 1, type: "dedicated-worker", name: "" } },
+  ],
+}
+```
+
+The diagnosis comes from the *shape* of the entry: a high `scriptCount` (118) over a `duration` only slightly above the threshold, with a nearly empty `scripts` array, means no individual task was expensive — the context was saturated by sheer task volume. This is exactly the tiny-task congestion that the Long Tasks and Long Animation Frame APIs cannot surface, and it is now visible in both documents and workers.
+
 
 # Relationship to the MessageEvent Timing API
 
@@ -570,6 +617,15 @@ When an execution context is congested, it typically delays many messages at onc
 
 - **Chromium Issue:** [Support Long Tasks API in workers](https://issues.chromium.org/issues/41399667)
   Web developers are interested in extending the Long Tasks API to monitor delayed execution in web workers. Unlike the Long Animation Frames (LoAF) API, the current Long Tasks API lacks script attribution, making it harder to trace the source of delays.
+
+# Privacy and Security Considerations
+
+This proposal exposes timing and attribution data that could, if unconstrained, reveal cross-origin information. The following constraints apply:
+
+- **Same-origin attribution only.** Per-script details such as `sourceURL`, `sourceFunctionName`, and `sourceCharPosition` are exposed only for scripts that are same-origin with the observing context. Cross-origin scripts are reported without these identifying fields, consistent with the existing Long Animation Frame API.
+- **No new cross-origin timing channel.** The congested-moment interval and `scriptCount` aggregate work on the observer's own event loop; they do not expose the internal timing of cross-origin frames or workers beyond what LoAF already permits.
+- **Worker contexts.** Extending reporting to Web Workers follows the same same-origin restrictions; a worker entry only attributes scripts running in contexts the observer is entitled to see.
+- **Timestamp coarsening.** As with other high-resolution timing APIs, timestamps are subject to the platform's existing resolution-clamping protections against timing attacks.
 
 # Acknowledgements
 
