@@ -40,12 +40,11 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
 
 Modern web applications run across multiple execution contexts, such as documents, iframes, and workers, each of which processes a stream of tasks. Responsiveness depends on these tasks running on time, but in practice a task queue can become *congested* when tasks pile up faster than they can be drained. When this happens, the page feels sluggish and important work is delayed.
 
-Today's web performance APIs cannot reliably surface this problem. The Long Animation Frame (LoAF) and Long Tasks APIs run only on the main thread and are anchored to rendering, reporting a frame only when it exceeds the 50ms threshold. As a result, they miss congestion that builds from many short tasks (none long enough to cross that threshold), cannot represent a congested period that spans many frames, and offer no coverage in workers at all.
+Today's web performance APIs cannot reliably surface this problem. The Long Animation Frame (LoAF) and Long Tasks APIs run only on the main thread and are anchored to rendering, reporting a frame only when it is delayed beyond the 50ms threshold. As a result, they miss congestion that builds from many short tasks (a frame can update between those tasks), cannot represent a congested period that spans many frames, and offer no coverage in workers at all.
 
 We address this by defining a **congested moment**: a sustained interval during which the task queue stays congested, reported as a single entry regardless of how many frames it spans. (See [What is Congested Moment?](#what-is-congested-moment) for the precise definition.)
 
 Rather than introduce a separate API, this explainer proposes to **extend the Long Animation Frame API** to report congested moments as an additional cadence, alongside the existing animation-frame cadence, and to make LoAF available in Web Workers. With this extension, developers can detect periods of persistent congestion and pinpoint their sources, on both the main thread and in workers, using a single familiar API and without manual instrumentation.
-
 
 # Goals
 
