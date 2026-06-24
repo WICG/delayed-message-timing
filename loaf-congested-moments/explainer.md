@@ -12,6 +12,7 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
 - [Problems](#problems)
   - [1. Long-running tasks blocking the event loop](#1-long-running-tasks-blocking-the-event-loop)
     - [Long-running JavaScript tasks](#long-running-javascript-tasks)
+    - [Long-running tasks delaying rendering in a worker (OffscreenCanvas)](#long-running-tasks-delaying-rendering-in-a-worker-offscreencanvas)
   - [2. Task queue buildup from high-frequency work](#2-task-queue-buildup-from-high-frequency-work)
     - [Concurrent task sources causing queue congestion](#concurrent-task-sources-causing-queue-congestion)
     - [Queue buildup from high-frequency postMessage calls](#queue-buildup-from-high-frequency-postmessage-calls)
@@ -25,6 +26,7 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Noam Rosenthal (Googl
   - [Congested Moment Entry Structure](#congested-moment-entry-structure)
   - [The `scriptCount` property](#the-scriptcount-property)
   - [The `cadence` property](#the-cadence-property)
+  - [Frame-based cadence in Web Workers (OffscreenCanvas)](#frame-based-cadence-in-web-workers-offscreencanvas)
   - [The `executionContext` property](#the-executioncontext-property)
   - [`PerformanceExecutionContextInfo` Interface](#performanceexecutioncontextinfo-interface)
   - [Example: diagnosing congestion from a flood of small tasks](#example-diagnosing-congestion-from-a-flood-of-small-tasks)
@@ -201,6 +203,146 @@ In this timeline, messages \#1, \#2, and \#3 are handled promptly because their 
 However, message \#4's task is instructed to run for 120ms. While it's processing, message \#5 (sent 60ms after message \#4 was sent) arrives at the worker. Message \#5 must wait in the worker's task queue until message \#4 completes. This results in message \#5 experiencing a significant delay (approximately 60ms) before its handler can even begin.
 
 Manually instrumenting code with `performance.now()` and `event.timeStamp` can help identify the root cause of delays as shown. However, in complex real-world applications, precisely identifying which long task caused a specific message delay, or distinguishing between delay caused by a preceding long task versus a message's own long handler, is very challenging without comprehensive, dedicated monitoring.
+
+### Long-running tasks delaying rendering in a worker (OffscreenCanvas)
+
+A long task in a worker does not only delay incoming messages; when the worker drives an `OffscreenCanvas`, it also delays the worker's own rendering. A worker that animates an `OffscreenCanvas` typically renders inside a `requestAnimationFrame` (`rAF`) loop, just like the main thread. Because `rAF` callbacks are dispatched on the worker's event loop, any long task running on that loop pushes the next `rAF` callback later, so frames are produced late and the animation stutters — a rendering latency that is invisible to the main thread's LoAF.
+
+The following example runs a small game in a worker. The main thread transfers an `OffscreenCanvas` to the worker and forwards keyboard input; the worker renders each frame from a `requestAnimationFrame` loop. To simulate variable per-frame work, each frame computes a Fibonacci number of random size, which occasionally produces a long task that delays the next `rAF` callback and therefore the next rendered frame.
+
+[Link to live demo](https://wicg.github.io/delayed-message-timing/examples/game_worker/)
+
+**index.html**
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Input with OffscreenCanvas</title>
+  </head>
+  <body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script src="game.js"></script>
+  </body>
+</html>
+```
+
+**game.js**
+
+The main thread transfers control of the canvas to the worker with `transferControlToOffscreen()`, then forwards `keydown` and `keyup` events to it. Note that the main thread's LoAF observer only sees long animation frames on the main thread; it cannot observe the worker's rendering frames.
+
+```js
+const canvas = document.getElementById("gameCanvas");
+const offscreen = canvas.transferControlToOffscreen();
+const worker = new Worker("game_worker.js");
+
+worker.postMessage({ canvas: offscreen }, [offscreen]);
+
+// Forward key inputs to the worker
+window.addEventListener("keydown", (e) => {
+  worker.postMessage({ type: "keydown", key: e.key });
+});
+
+window.addEventListener("keyup", (e) => {
+  worker.postMessage({ type: "keyup", key: e.key });
+});
+
+// The main thread's LoAF observer cannot see the worker's rendering frames.
+const observer = new PerformanceObserver((list) => {
+  list.getEntries().forEach((entry) => {
+    console.log(
+      `Long animation frame on the main thread: ${entry.duration.toFixed(2)}ms`,
+    );
+  });
+});
+
+observer.observe({ type: "long-animation-frame", buffered: true });
+```
+
+**game_worker.js**
+
+The worker renders each frame inside a `requestAnimationFrame` loop. Before drawing, it computes `fibonacci()` of a random size to simulate variable per-frame work. When that computation is large, it occupies the worker's event loop long enough to delay the next `rAF` callback and the next rendered frame. The worker has no performance API today that can attribute this delay to the script responsible.
+
+```js
+function getRandomNumber(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function fibonacci(n) {
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data.canvas) {
+    setupGame(event.data.canvas);
+  } else if (event.data.type === "keydown" || event.data.type === "keyup") {
+    handleInput(event.data);
+  }
+});
+
+let ctx;
+let isRunning = true;
+const keysPressed = new Set();
+
+const rectangle = { x: 120, y: 100, width: 50, height: 50, speed: 5 };
+
+function setupGame(offscreenCanvas) {
+  ctx = offscreenCanvas.getContext("2d");
+  startGameLoop();
+}
+
+function handleInput(input) {
+  if (input.type === "keydown") {
+    keysPressed.add(input.key);
+  } else if (input.type === "keyup") {
+    keysPressed.delete(input.key);
+  }
+}
+
+function startGameLoop() {
+  function gameLoop() {
+    // Simulate variable per-frame work; large values become a long task
+    // that delays the next rAF callback (and therefore the next frame).
+    fibonacci(getRandomNumber(10, 35));
+
+    ctx.clearRect(0, 0, 800, 600);
+
+    // Update position based on key input
+    if (keysPressed.has("ArrowUp")) rectangle.y -= rectangle.speed;
+    if (keysPressed.has("ArrowDown")) rectangle.y += rectangle.speed;
+    if (keysPressed.has("ArrowLeft")) rectangle.x -= rectangle.speed;
+    if (keysPressed.has("ArrowRight")) rectangle.x += rectangle.speed;
+
+    // Keep the rectangle within bounds
+    rectangle.x = Math.max(0, Math.min(rectangle.x, 800 - rectangle.width));
+    rectangle.y = Math.max(0, Math.min(rectangle.y, 600 - rectangle.height));
+
+    ctx.fillStyle = "blue";
+    ctx.fillRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+
+    if (isRunning) {
+      requestAnimationFrame(gameLoop);
+    }
+  }
+
+  gameLoop();
+}
+```
+
+When `fibonacci()` is given a large value, the frame's work blocks the worker's event loop long enough that the next `requestAnimationFrame` callback fires late, so the rectangle visibly stutters even though the main thread stays idle.
+
+To see why this stutter is invisible to existing tooling, it helps to understand how the worker's rendering reaches the screen. The worker's `requestAnimationFrame` is driven by the display's refresh signal (vsync, ~16.7ms at 60Hz), independently of the main thread and without blocking it. Each frame, the worker draws into the `OffscreenCanvas` and commits the result to a frame buffer. The compositor is **decoupled** from the worker: at every vsync it simply composites whatever is currently in that buffer onto the page. It does not wait for, or check whether, the worker's `rAF` callback has finished — it follows a *latest-wins* model and reuses the most recently committed buffer.
+
+This decoupling is what makes the rendering latency hard to observe:
+
+- When a frame's work (here, a large `fibonacci()`) overruns the ~16.7ms budget, the worker commits **no new buffer** in time, so the compositor re-presents the **previous** frame. One or more frames are effectively dropped, and the animation stutters — yet nothing blocks or even notifies the compositor.
+- Because the work happens entirely on the worker, the **main thread stays idle**, so the main thread's LoAF reports nothing. The slow frame is simply not visible from where today's frame-anchored reporting runs.
+- The same blocked event loop also delays any input `message` handlers already queued in the worker, so rendering latency and input latency build up together — but neither is attributed to the script responsible.
+
+Today, workers have no frame-anchored performance reporting at all: LoAF runs only on the main thread, so no existing API can tell a developer *which* worker frame was late or *which* function caused it. This motivates the goal in [Goals](#goals) that a worker driving an `OffscreenCanvas` should additionally follow the main thread's frame-based (`rAF`) cadence, so that this rendering latency is reported as a LoAF entry — anchored to the late frame and carrying per-script attribution. The precise criterion for generating such an entry is defined in [Frame-based cadence in Web Workers (OffscreenCanvas)](#frame-based-cadence-in-web-workers-offscreencanvas).
 
 ## 2. Task queue buildup from high-frequency work
 
@@ -553,6 +695,54 @@ function onEntries(list) {
 ```
 
 This lets developers branch on the reporting reason without inferring it from other fields, and keeps the existing animation-frame semantics unchanged for code that ignores the new value.
+
+## Frame-based cadence in Web Workers (OffscreenCanvas)
+
+A worker that drives an `OffscreenCanvas` produces rendering frames of its own, so it follows the **animation-frame cadence** in addition to the congested-moment cadence. This section defines when such a worker emits an `animation-frame` LoAF entry.
+
+The criterion mirrors the main thread's existing LoAF rule: an entry is generated when a frame's **span from its scheduled start (the vsync at which the `rAF` callback should have run) to its completion (when the worker commits the frame's buffer) exceeds 50ms** — the same threshold the main thread already uses, roughly three 16.7ms frames at 60Hz. The threshold remains configurable through `durationThreshold`.
+
+The default 50ms is appropriate for general responsiveness, but a worker rendering a real-time animation such as a game is far more latency-sensitive: at 60Hz it must produce a fresh frame every ~16.7ms, so even a single missed frame is a visible stutter. Such contexts should lower `durationThreshold` toward one frame (for example, ~20ms, just over the 16.7ms budget) so that a single late frame is reported rather than only sustained stalls of three or more frames. This is the per-context tuning called out in [Goals](#goals): a longer threshold for heavy background processing versus a shorter one for a high-performance game engine.
+
+Two distinct delays can push a frame past this threshold, and both are captured by the single start-to-finish span:
+
+- **The frame cannot start on time.** A preceding long task — or a backlog of queued input `message` handlers — keeps the worker's event loop busy past the next vsync, so the `rAF` callback is dispatched late. The waiting time before the callback runs is counted in the frame's span.
+- **The frame cannot finish on time.** The `rAF` callback's own work (for example, a large `fibonacci()`) runs past the frame budget before it can commit a new buffer. The callback's execution time is counted in the frame's span.
+
+Because both cases are measured as one start-to-finish interval, a worker frame is reported exactly when that interval crosses the threshold, regardless of which delay dominated. The resulting entry carries `cadence: "animation-frame"`, and its `scripts` array attributes the blocking work to the responsible function.
+
+This is distinct from the congested-moment cadence: a **single late frame** is reported as an `animation-frame` entry, whereas **sustained queue congestion that spans many frames** is reported as a `congested-moment` entry. A worker driving an `OffscreenCanvas` can emit both.
+
+With this extension, the `game_worker.js` example above can monitor its own rendering frames directly from inside the worker — something no API allows today. The worker registers a `PerformanceObserver` for `long-animation-frame` entries and inspects the late ones:
+
+```js
+// Inside game_worker.js — observe the worker's own rendering frames.
+const observer = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (entry.cadence !== "animation-frame") continue; // ignore congested-moment entries here
+
+    console.log(
+      `Late worker frame: ${entry.duration.toFixed(1)}ms ` +
+      `(started at ${entry.startTime.toFixed(1)})`,
+    );
+
+    // Attribute the delay to the function responsible (e.g. fibonacci()).
+    for (const script of entry.scripts) {
+      console.log(
+        `  blocked by ${script.sourceFunctionName} ` +
+        `in ${script.sourceURL} for ${script.duration.toFixed(1)}ms`,
+      );
+    }
+  }
+});
+
+// durationThreshold tunes how late a frame must be before it is reported.
+// A game targets 60Hz (~16.7ms/frame), so use a short threshold (~20ms,
+// just over one frame) to catch even a single missed frame.
+observer.observe({ type: "long-animation-frame", durationThreshold: 20, buffered: true });
+```
+
+When a large `fibonacci()` pushes a frame past the threshold, this observer fires with an `animation-frame` entry whose `scripts` array points at `fibonacci` in `game_worker.js`, so the developer learns both *which* frame was late and *why* — without any manual `performance.now()` instrumentation.
 
 ## The `executionContext` property
 
