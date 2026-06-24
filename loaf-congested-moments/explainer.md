@@ -586,12 +586,9 @@ More precisely, a congested moment is a continuous time interval where:
 
 ## Why extend LoAF instead of creating a new performance API?
 
-Detecting a long animation frame and detecting a congested moment are fundamentally the same task: both observe a bottleneck in the message queue and help developers find its cause, whether that is a long task or a large number of tiny tasks. They differ only in the symptom each one surfaces:
+Detecting a long animation frame and detecting a congested moment are fundamentally the same task: both observe a bottleneck in the message queue and help developers find its cause, whether that is a single long task or a large number of tiny tasks. They differ only in the symptom each surfaces — a delayed rendering frame versus a sustained backlog of delayed tasks (see [Long Animation Frame vs. Congested Moment](#long-animation-frame-vs-congested-moment) for a side-by-side comparison).
 
-- A **long animation frame** is reported when an animation frame takes longer than 50ms, typically because the main thread is busy with tasks (such as a long task) that delay the frame's rendering update. It is anchored to a single frame on the main thread.
-- A **congested moment** is reported when message processing is delayed beyond a threshold (e.g., 200ms). This delay can be caused not only by a long task but also by a flood of small tasks.
-
-Because LoAF is frame-anchored, it cannot capture the second case. Consider a burst of short tasks of just 2–3ms each that floods the task queue. Because a frame can update between those tasks and no single frame crosses 50ms, LoAF never fires, even though tasks are continuously delayed and the queue keeps growing. A single LoAF entry also maps to one frame, so it cannot represent a congested period that spans many frames.
+Because LoAF is frame-anchored, it cannot capture the second symptom. Consider a burst of short tasks of just 2–3ms each that floods the task queue: a frame can update between those tasks and no single frame crosses 50ms, so LoAF never fires even though tasks are continuously delayed and the queue keeps growing. A single LoAF entry also maps to one frame, so it cannot represent a congested period that spans many frames.
 
 Since the two concepts diagnose the same class of problem, we extend LoAF rather than add a separate API: a congested moment is reported as an additional reporting cadence, alongside the existing animation-frame cadence. This lets developers use a single, familiar API to observe both symptoms, and it brings LoAF coverage to Web Workers, which have none today.
 
@@ -667,9 +664,7 @@ const someCongestedMomentEntry = {
 - A **low** `scriptCount` with a long total `duration` indicates that a single long task blocked the event loop.
 - A **high** `scriptCount` indicates that the interval was congested by many short tasks piling up faster than they could drain — the case that classic LoAF and Long Tasks cannot surface.
 
-`scriptCount` counts *every* JS entry point in the interval, whereas the `scripts` array lists only those whose individual duration exceeds the per-script reporting threshold. When congestion is caused by a flood of tiny tasks (each only a few milliseconds, none over the threshold), `scripts` can be **empty** even though `scriptCount` is large. Over a congested moment of 200ms or more made up of ~2ms tasks, `scriptCount` commonly reaches several dozen and can exceed 100 while `scripts` stays empty — precisely the signature that distinguishes tiny-task congestion from a single long task.
-
-Combined with the per-script entries in `scripts`, `scriptCount` lets developers tell at a glance whether to look for one expensive function or for a high-frequency source flooding the queue.
+`scriptCount` counts *every* JS entry point in the interval, whereas the `scripts` array lists only those whose individual duration exceeds the per-script reporting threshold. When congestion is caused by a flood of tiny tasks (each only a few milliseconds, none over the threshold), `scripts` can be **empty** even though `scriptCount` is large — the signature of tiny-task congestion, shown concretely in [Example: diagnosing congestion from a flood of small tasks](#example-diagnosing-congestion-from-a-flood-of-small-tasks).
 
 ## The `cadence` property
 
