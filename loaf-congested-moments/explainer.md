@@ -818,7 +818,7 @@ This proposal exposes timing and attribution data that could, if unconstrained, 
 
 # Acknowledgements
 
-Thank you to Abhishek Shanthkumar, Alex Russell, Andy Luhrs, Dave Meyers, Ethan Bernstein, Evan Stade, Jared Mitchell, Luis Pardo, Michal Mocny, Noam Helfman, Noam Rosenthal, Sam Fortiner, Samuele Carpineti, Steve Becker, Yoav Weiss, Yehor Lvivski for their valuable feedback and advice.
+Thank you to Michal Mocny for valuable feedback and advice.
 
 # References
 - [Event Timing API](https://w3c.github.io/event-timing/)
