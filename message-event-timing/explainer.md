@@ -7,12 +7,11 @@ Author: [Joone Hur](https://github.com/joone) (Microsoft), Michal Mocny (Google)
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents** 
 
-- [Explainer: Exposing MessageEvent Timing via the Event Timing API](#explainer-exposing-messageevent-timing-via-the-event-timing-api)
 - [Introduction](#introduction)
 - [Goals](#goals)
 - [Non-Goals](#non-goals)
 - [Problems](#problems)
-  - [1. Queue wait time (`blockedDuration`) is hard to measure accurately](#1-queue-wait-time-blockedduration-is-hard-to-measure-accurately)
+  - [1. Queue wait time is hard to measure accurately](#1-queue-wait-time-is-hard-to-measure-accurately)
   - [2. Serialization and deserialization costs are not observable](#2-serialization-and-deserialization-costs-are-not-observable)
   - [3. The sending and receiving contexts are not attributed](#3-the-sending-and-receiving-contexts-are-not-attributed)
 - [Proposed Solution: PerformanceMessageEventTiming](#proposed-solution-performancemessageeventtiming)
@@ -56,9 +55,9 @@ This will enable developers to identify delayed `postMessage` communication acro
 
 When a `postMessage` is delayed, developers can detect *that* something was slow, but the per-message details needed to act on it are not exposed. To diagnose a delayed message, a developer needs to know **which** message was delayed, **how long it waited** in the receiver's task queue before its handler ran, **how long the handler itself took**, and **how much of the cost came from serializing and deserializing** the payload. Today none of these can be obtained reliably without manual instrumentation, and even then the measurements are error-prone.
 
-This explainer focuses on that *per-message* visibility. Diagnosing why an execution context is congested as a whole — for example, a long task or a flood of small tasks blocking the event loop — is a separate, interval-level concern covered by the [Congested Moment / LoAF extension explainer](../loaf-congested-moments/explainer.md). The two are complementary: this proposal explains *what happened to an individual message*, while the LoAF extension explains *why the context was congested*.
+This explainer focuses on that *per-message* visibility; diagnosing why an execution context is congested as a whole is a separate, interval-level concern, covered by the [Congested Moment / LoAF extension explainer](../loaf-congested-moments/explainer.md) and discussed in [Relationship to the Congested Moment / LoAF extension](#relationship-to-the-congested-moment--loaf-extension).
 
-## 1. Queue wait time (`blockedDuration`) is hard to measure accurately
+## 1. Queue wait time is hard to measure accurately
 
 The most useful signal for diagnosing a delayed message is how long it waited in the receiver's task queue *before* its handler ran. Approximating this with manual instrumentation requires comparing a sender-side timestamp (passed in the message payload) against a receiver-side timestamp taken at the start of `onmessage`. This is error-prone because the two contexts have different `timeOrigin`s, and the measured value mixes together serialization, actual queue wait, and deserialization, so it cannot isolate the pure queueing delay. The browser, however, knows exactly when the message was enqueued and when its handler began.
 
