@@ -41,7 +41,7 @@ This will enable developers to identify delayed `postMessage` communication acro
 
 * **Enable detection of congested contexts:** Allow developers to identify specific browser contexts (windows, tabs, iframes) or web workers that are slow to process `MessageEvent`s. This covers [cross-document messaging](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage), [cross-worker/document messaging](https://developer.mozilla.org/en-US/docs/Web/API/Worker/postMessage), [channel messaging](https://developer.mozilla.org/en-US/docs/Web/API/Channel_Messaging_API), and [broadcast channels](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API).
 
-* **Identify the origin of a `MessageEvent`:** Allow developers to identify which execution context sent a `MessageEvent`.
+* **Identify the sender and handler of a `MessageEvent`:** Allow developers to identify which execution context and script sent a `MessageEvent` and which handled it.
 
 # Non-Goals
 
@@ -53,7 +53,7 @@ This will enable developers to identify delayed `postMessage` communication acro
 
 # Problems
 
-When a `postMessage` is delayed, developers can detect *that* something was slow, but the per-message details needed to act on it are not exposed. To diagnose a delayed message, a developer needs to know **which** message was delayed, **how long it waited** in the receiver's task queue before its handler ran, **how long the handler itself took**, and **how much of the cost came from serializing and deserializing** the payload. Today none of these can be obtained reliably without manual instrumentation, and even then the measurements are error-prone.
+When a `postMessage` is delayed, developers can detect *that* something was slow, but the per-message details needed to act on it are not exposed. To diagnose a delayed message, a developer needs to know **which** message was delayed, **how long it waited** in the receiver's task queue before its handler ran, **how long the handler itself took**, and **how much of the cost came from serializing and deserializing** the payload. Today none of these can be obtained reliably without manual instrumentation, and even then the values are only rough approximations — in particular, the pure task queue wait time cannot be measured accurately.
 
 This explainer focuses on that *per-message* visibility; diagnosing why an execution context is congested as a whole is a separate, interval-level concern, covered by the [Congested Moment / LoAF extension explainer](../loaf-congested-moments/explainer.md) and discussed in [Relationship to the Congested Moment / LoAF extension](#relationship-to-the-congested-moment--loaf-extension).
 
