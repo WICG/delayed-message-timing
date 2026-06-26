@@ -39,7 +39,7 @@ This will enable developers to identify delayed `postMessage` communication acro
 
 * **Provide detailed end-to-end timing:** Offer comprehensive timing information for `postMessage` events, including task queue wait time, and the time taken for serialization and deserialization, to help pinpoint bottlenecks.
 
-* **Enable detection of congested contexts:** Allow developers to identify specific browser contexts (windows, tabs, iframes) or web workers that are slow to process `MessageEvent`s. This covers [cross-document messaging](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage), [cross-worker/document messaging](https://developer.mozilla.org/en-US/docs/Web/API/Worker/postMessage), [channel messaging](https://developer.mozilla.org/en-US/docs/Web/API/Channel_Messaging_API), and [broadcast channels](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API).
+* **Attribute slow message handling to specific contexts:** Allow developers to identify which browser contexts (windows, tabs, iframes) or web workers are slow to handle individual `MessageEvent`s, based on the per-message timing and attribution this API exposes. This covers [cross-document messaging](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage), [cross-worker/document messaging](https://developer.mozilla.org/en-US/docs/Web/API/Worker/postMessage), [channel messaging](https://developer.mozilla.org/en-US/docs/Web/API/Channel_Messaging_API), and [broadcast channels](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API).
 
 * **Identify the sender and handler of a `MessageEvent`:** Allow developers to identify which execution context and script sent a `MessageEvent` and which handled it.
 
