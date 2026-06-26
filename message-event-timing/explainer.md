@@ -172,58 +172,83 @@ In this example, the worker log `blockedDuration: 111.10 ms` indicates the time 
 
 ## 3. The sending and receiving contexts are not attributed
 
-Even when a delay is detected, developers cannot easily tell *which* script sent the message and *which* execution context handled it. In complex applications with multiple windows, iframes, and workers, identifying the exact source and destination of a delayed message—including the source location and the type of context (window, iframe, or worker)—is essential for diagnosis but cannot be derived from the `message` event alone.
+Even when a delay is detected, the `message` event carries no information about *which script* sent the message or *which execution context* it came from. In complex applications a single receiver often handles messages from many senders — the top-level document, several embedded iframes (sometimes third-party widgets), and other workers — and when one of those messages is delayed or its handler is slow, the developer needs to know *who sent it* in order to fix the right code.
 
-For example, consider a worker that receives requests over a `MessageChannel` from two different execution contexts—the top-level document and an embedded iframe—through separate ports.
+For example, consider a worker that acts as a shared backend for several contexts that all post requests to it. The top-level document and an embedded iframe each connect to it over their own `MessageChannel`:
 
-**main.js** (top-level document) — hands one port to the worker and keeps the other to send requests:
+[Link to live demo](https://wicg.github.io/delayed-message-timing/examples/message_event/)
+
+**main.js** (top-level document) — connects both itself and the embedded iframe to the worker, each via its own `MessageChannel`:
 
 ```js
-const worker = new Worker("worker.js");
+// Top-level document.
+//
+// It connects BOTH itself and an embedded iframe to the same worker, each
+// through its own MessageChannel. The worker receives requests from both but
+// cannot tell them apart: for MessagePort messages, e.source is null and
+// e.origin is "".
 
-// Connect the top-level document to the worker via a channel.
+const worker = new Worker("worker.js");
+const iframe = document.getElementById("appFrame");
+
+// --- Channel 1: top-level document <-> worker ---
 const mainChannel = new MessageChannel();
 worker.postMessage({ type: "connect" }, [mainChannel.port2]);
 mainChannel.port1.postMessage({ query: "loadDashboard" });
 
-// The iframe sets up its own channel to the same worker (see iframe.js).
+// --- Channel 2: embedded iframe <-> worker ---
+// Once the iframe has loaded (and registered its message listener), give it a
+// port whose other end is connected to the worker.
+iframe.addEventListener("load", () => {
+  const iframeChannel = new MessageChannel();
+  // Worker end of the channel.
+  worker.postMessage({ type: "connect" }, [iframeChannel.port2]);
+  // iframe end of the channel (transferred into the iframe).
+  iframe.contentWindow.postMessage({ type: "workerPort" }, "*", [
+    iframeChannel.port1,
+  ]);
+});
 ```
 
-**iframe.js** (embedded iframe) — connects to the same worker through its own channel:
+**iframe.js** (embedded iframe) — receives a port connected to the worker and sends a request on it:
 
 ```js
-// The iframe also needs a port to the worker, forwarded via the parent.
+// Embedded iframe.
+//
+// It receives a port (connected to the worker) from the parent document, then
+// sends a request to the worker on that port.
+
 addEventListener("message", (event) => {
   if (event.data?.type === "workerPort") {
+    // Receive the port that connects this iframe to the worker.
     const port = event.ports[0];
     port.postMessage({ query: "loadWidget" });
   }
 });
 ```
 
-**worker.js** — receives requests from both contexts but cannot tell them apart:
+**worker.js** — handles requests from every context, but cannot tell them apart:
 
 ```js
-onmessage = (event) => {
+// Each context connects by sending a "connect" message that transfers one end
+// of a MessageChannel. The worker then listens for requests on that port.
+
+self.onmessage = (event) => {
+  if (event.data?.type !== "connect") return;
+
   const port = event.ports[0];
   port.onmessage = (e) => {
-    // A request arrived — but who sent it, the top-level document or the iframe?
-    // For MessagePort messages, e.source is null and e.origin is "", so the
-    // worker has no way to attribute the message to its originating context.
-    console.log("[worker] request:", e.data.query, "from:", e.source, e.origin);
+    // A request arrived. If its handler is slow, or the message waited a long
+    // time in the queue, which context sent it — the document, the iframe, or
+    // another worker? The MessageEvent carries no attribution for the sender.
     handleRequest(e.data);
   };
 };
 ```
 
-**Console output:**
+The `message` event provides no way to answer that question. The closest existing fields do not help: `event.source` and `event.origin` identify only the sending *window* (and are `null` / `""` for `MessagePort` and worker messages), never the sending *script* or *execution context*, and never a worker. At the current platform level there is simply no way to attribute a delayed message to the script and context that sent or handled it — which is what this proposal adds.
 
-```
-[worker] request: loadDashboard from: null
-[worker] request: loadWidget from: null
-```
-
-Both requests look identical at the receiver: `event.source` is `null` and `event.origin` is an empty string for `MessagePort` messages. Even for `window.postMessage`, `event.source`/`event.origin` only identify the sending *window*, not which script or execution context (and never a worker). As a result, the worker cannot determine whether a delayed request came from the main thread or the iframe, making it impossible to attribute the delay to its true origin.
+To work around this today, the standard pattern in web development is for the sender to embed its own identifier in the message payload — for example, including a `sender: "MyScript"` property in `event.data` — and have the receiver read it back. This works, but only for code the developer controls and has instrumented: it does not cover third-party scripts or libraries, must be threaded through every message and message type, and reflects only whatever label the sender chose to include — not the actual script, its source location, or its execution context. This proposal provides that attribution automatically, without manual tagging.
 
 # Proposed Solution: PerformanceMessageEventTiming
 
