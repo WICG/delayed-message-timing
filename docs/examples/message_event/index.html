@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Unattributed MessageEvent sender/receiver</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; }
+      pre { background: #f4f4f4; padding: 0.75rem; min-height: 6rem; white-space: pre-wrap; }
+      button { margin-right: 0.5rem; }
+      iframe { display: block; margin-top: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Who sent the message? The worker can't tell</h1>
+    <p>
+      A worker acts as a shared backend that several contexts &mdash; this
+      top-level document and an embedded iframe &mdash; connect to over their
+      own <code>MessageChannel</code>. When a request arrives, the worker
+      cannot tell which context sent it: the <code>MessageEvent</code> carries
+      no attribution for the sender.
+    </p>
+
+    <button id="fromDocument">Send "loadDashboard" from Document</button>
+    <button id="fromIframe">Send "loadWidget" from iframe</button>
+
+    <h3>Log (what the worker saw)</h3>
+    <pre id="log"></pre>
+
+    <h3>Embedded iframe</h3>
+    <iframe
+      id="appFrame"
+      src="iframe.html"
+      width="400"
+      height="60"
+      style="border: 1px solid #ccc"
+    ></iframe>
+
+    <script src="main.js"></script>
+  </body>
+</html>
