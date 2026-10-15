@@ -1,3 +1,12 @@
+**Status update: pursuing extensions to LoAF**
+
+We are now pursuing extensions to the **Long Animation Frames (LoAF) API** rather than introducing a separate Delayed Message Timing API. The current proposal focuses on detecting sustained task-queue congestion in documents and Web Workers.
+
+See the [LoAF extension explainer](https://github.com/WICG/delayed-message-timing/blob/main/loaf-congested-moments/explainer.md) for the current proposal and [why we are extending LoAF instead of creating a new performance API](https://github.com/WICG/delayed-message-timing/blob/main/loaf-congested-moments/explainer.md#why-extend-loaf-instead-of-creating-a-new-performance-api) for the rationale.
+
+This explainer is retained for historical context. The per-message timing and serialization/deserialization measurements described below are not part of the current LoAF extension proposal.
+
+
 # Explainer: Delayed Message Timing API
 
 Author: [Joone Hur](https://github.com/joone)
