@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620" role="img" aria-labelledby="title description">
+  <title id="title">Opening a long email conversation</title>
+  <desc id="description">The main thread sends 100 email bodies to a dedicated worker in a burst. Each message handler takes about 3 milliseconds. The worker runs the short tasks consecutively for roughly 300 milliseconds. At 200 milliseconds the interval background turns pale red to mark the reporting threshold; no entry exists yet. A brief timer task starts at 306 milliseconds, after an idle gap longer than the 5 millisecond threshold. When that task completes at 306.5 milliseconds, the monitor detects the preceding idle gap, finalizes the interval, and creates a LoAF entry. The timer only schedules the task; it does not detect congestion. A separate next task arrives later, at 345 milliseconds. This is a schematic illustration, not measured API output.</desc>
+  <defs>
+    <pattern id="tasks" width="6" height="44" patternUnits="userSpaceOnUse">
+      <rect width="5" height="44" fill="#1769aa"/>
+    </pattern>
+    <clipPath id="completed">
+      <rect class="progress" x="140" y="388" width="600" height="44"/>
+    </clipPath>
+    <pattern id="queued" width="12" height="36" patternUnits="userSpaceOnUse">
+      <rect width="10" height="36" rx="2" fill="#9b315c"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#65748b"/>
+    </marker>
+    <symbol id="loaf-document" viewBox="0 0 20 24">
+      <path d="M2 1H12L18 7V23H2Z M12 1V7H18 M6 12H14 M6 16H14 M6 20H11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", Arial, sans-serif; fill: #172b4d; }
+    .label { font-size: 16px; font-weight: 600; }
+    .small { font-size: 14px; }
+    .muted { fill: #465570; }
+    .cursor { animation: clock 16s linear infinite; }
+    .progress { animation: process 16s linear infinite; }
+    .threshold { animation: eligible 16s linear infinite; }
+    .interval { animation: interval-threshold 16s linear infinite; }
+    .entry { animation: report 16s linear infinite; }
+    .idle-check { animation: idle-check 16s linear infinite; }
+    .next-task { animation: next-task 16s linear infinite; }
+    .queue { animation: backlog 16s linear infinite; }
+    .message { animation: flight 16s linear infinite; opacity: 0; }
+    .message:nth-child(2) { animation-delay: .15s; }
+    .message:nth-child(3) { animation-delay: .3s; }
+    .message:nth-child(4) { animation-delay: .45s; }
+    .message:nth-child(5) { animation-delay: .6s; }
+    .message:nth-child(6) { animation-delay: .75s; }
+    @keyframes clock {
+      0%, 19.9% { transform: translateX(0); opacity: 0; }
+      20% { transform: translateX(0); opacity: 1; }
+      94%, 97% { transform: translateX(740px); opacity: 1; }
+      100% { transform: translateX(740px); opacity: 0; }
+    }
+    @keyframes process {
+      0%, 20% { width: 0; }
+      80%, 100% { width: 600px; }
+    }
+    @keyframes eligible {
+      0%, 59.9% { opacity: 0; }
+      60%, 97% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes report {
+      0%, 81.29% { opacity: 0; }
+      81.3%, 97% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes idle-check {
+      0%, 81.19% { opacity: 0; }
+      81.2%, 97% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes next-task {
+      0%, 88.9% { opacity: 0; }
+      89%, 97% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes interval-threshold {
+      0%, 59.9% { fill: #fff0cb; stroke: #b47d12; }
+      60%, 100% { fill: #fde5e5; stroke: #b74a4a; }
+    }
+    @keyframes backlog {
+      0% { width: 0; }
+      20% { width: 360px; }
+      80%, 100% { width: 0; }
+    }
+    @keyframes flight {
+      0% { transform: translate(0, 0); opacity: 0; }
+      2% { opacity: 1; }
+      12% { transform: translate(220px, 95px); opacity: 1; }
+      13%, 100% { transform: translate(220px, 95px); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cursor, .message { animation: none; display: none; }
+      .progress { animation: none; width: 600px; }
+      .queue { animation: none; width: 360px; }
+      .threshold, .entry, .idle-check, .next-task { animation: none; opacity: 1; }
+      .interval { animation: none; fill: #fde5e5; stroke: #b74a4a; }
+    }
+  </style>
+  <rect width="960" height="620" rx="16" fill="#f6f8fc"/>
+  <text x="36" y="42" font-size="25" font-weight="700">Opening a long email conversation</text>
+  <text x="36" y="72" class="muted" font-size="17">100 short tasks. About 3 ms each. One sustained backlog.</text>
+
+  <rect x="36" y="94" width="888" height="64" rx="8" fill="#e6eef8" stroke="#1769aa"/>
+  <text x="52" y="121" class="label">Main thread</text>
+  <text x="238" y="121" class="label">Open conversation: postMessage() x 100</text>
+  <text x="238" y="145" class="small">Request preview text for each email in a quick for loop.</text>
+  <path d="M300 164V184H520V228" stroke="#65748b" fill="none" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <text x="550" y="190" class="small muted">Moving dots represent batches of messages.</text>
+
+  <rect x="36" y="208" width="888" height="104" rx="8" fill="#f2eaf0" stroke="#9b315c"/>
+  <text x="52" y="237" class="label">Dedicated worker</text>
+  <text x="238" y="260" class="label">Message queue</text>
+  <rect x="520" y="237" width="360" height="36" rx="3" fill="#e1d6df"/>
+  <rect class="queue" x="520" y="237" width="360" height="36" fill="url(#queued)"/>
+  <text x="238" y="295" class="small">The burst builds a backlog; processing each email drains it.</text>
+  <g fill="#9b315c" stroke="white" stroke-width="2">
+    <circle class="message" cx="300" cy="150" r="7"/>
+    <circle class="message" cx="300" cy="150" r="7"/>
+    <circle class="message" cx="300" cy="150" r="7"/>
+    <circle class="message" cx="300" cy="150" r="7"/>
+    <circle class="message" cx="300" cy="150" r="7"/>
+    <circle class="message" cx="300" cy="150" r="7"/>
+  </g>
+
+  <text x="36" y="342" class="label">Worker processing timeline (same workload)</text>
+  <rect class="interval" x="140" y="357" width="600" height="161" rx="8" fill="#fff0cb" stroke="#b47d12"/>
+  <text x="156" y="380" class="small">100 consecutive message handlers</text>
+  <rect x="140" y="388" width="600" height="44" fill="#d7e1ed"/>
+  <rect x="140" y="388" width="600" height="44" fill="url(#tasks)" clip-path="url(#completed)"/>
+  <text id="idle-gap-label" x="764" y="414" class="small">Idle gap</text>
+  <g class="idle-check">
+    <title>The timer schedules a brief task. When it completes, the monitor detects the preceding gap greater than 5 ms and finalizes the interval.</title>
+    <rect x="752" y="388" width="1" height="44" fill="#65748b"/>
+  </g>
+  <g class="next-task">
+    <rect x="830" y="388" width="10" height="44" fill="#1769aa"/>
+    <text x="852" y="414" class="small">Next task</text>
+  </g>
+  <text x="156" y="460" class="label">One congested interval: roughly 300 ms</text>
+  <text x="156" y="486" class="small">Each thin blue bar is a separate task, not one long script.</text>
+
+  <path d="M140 533H880" stroke="#65748b"/>
+  <g class="small" text-anchor="middle">
+    <text x="140" y="556">0</text>
+    <text x="340" y="556">100 ms</text>
+    <text x="540" y="556">200 ms</text>
+    <text x="740" y="556">300 ms</text>
+    <text x="840" y="556">350 ms</text>
+  </g>
+  <path d="M540 354V533" stroke="#9b315c" stroke-width="2" stroke-dasharray="5 5"/>
+  <g class="cursor">
+    <path d="M140 350V533" stroke="#172b4d" stroke-width="2"/>
+    <path d="M134 349H146L140 358Z" fill="#172b4d"/>
+  </g>
+
+  <g class="entry" id="loaf-entry" aria-label="LoAF entry created after an idle gap is detected">
+    <path d="M140 503V511H740V503" fill="none" stroke="#65748b"/>
+    <path d="M740 511H819V478" fill="none" stroke="#65748b" marker-end="url(#arrow)"/>
+    <rect id="loaf-entry-badge" x="748" y="448" width="142" height="30" rx="6" fill="#e6eef8" stroke="#1769aa"/>
+    <use href="#loaf-document" x="756" y="454" width="14" height="18" style="color:#1769aa"/>
+    <text x="776" y="468" font-size="13" font-weight="600" style="fill:#1769aa">LoAF entry</text>
+  </g>
+
+  <g class="threshold">
+    <text x="36" y="599" class="label" style="fill:#9b315c">200 ms threshold reached: the interval qualifies for a LoAF entry.</text>
+  </g>
+</svg>
