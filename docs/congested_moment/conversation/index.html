@@ -15,10 +15,14 @@
   </head>
   <body>
     <h1>Opening a long email conversation</h1>
-    <p>Send 100 synthetic email bodies to a dedicated worker in a burst.
-      Each handler extracts preview text and simulates about 3 ms of CPU work.
-      This is not a network or database benchmark.</p>
-    <p>For actual worker LoAF entries, use a Chromium build with the experimental implementation and
+    <p>Imagine opening an email conversation with a long history of replies.
+      The app has already fetched the emails and asks a web worker to extract preview text for each email.</p>
+    <p>This demo processes 100 sample emails. The main thread sends the requests in a quick
+      <code>for</code> loop, with about 3 ms of simulated CPU work per email in the worker.
+      Together, these short tasks keep the worker busy for roughly 300 ms.
+      Later emails wait behind the earlier work, even though each task is short.</p>
+    <p>The demo measures processing times and displays actual worker LoAF entries when supported.
+      Use a Chromium build with the experimental implementation and
       <code>--enable-blink-features=LongAnimationFrameWorker</code>.
       Serve this folder over HTTP, not a <code>file:</code> URL.</p>
     <button id="start" type="button">Open conversation</button>
@@ -28,9 +32,15 @@
     <h2>Actual worker LoAF entries</h2>
     <p id="support">Support is checked inside the worker when the demo starts.</p>
     <pre id="entries" aria-label="Actual worker LoAF entries">No entries received.</pre>
-    <p>Workload completion is separate from entry delivery. The worker schedules a trailing
-      timer to allow an idle gap. Timings and entry counts depend on the browser and scheduler;
-      the demo never creates substitute performance entries.</p>
-    <img src="../images/congested-moment.svg" alt="Illustration of 100 short worker tasks forming one congested interval.">
+    <p>The 200 ms congestion threshold applies to the whole congested interval, not the wait time
+      of each message. Passing that threshold does not create an entry immediately.
+      In the current implementation, the LoAF monitor checks for an idle gap longer than 5 ms
+      when a subsequent task completes. It then finalizes a qualifying interval and creates a LoAF entry.
+      Actual timings and entry counts depend on the browser and scheduler.</p>
+    <p>A high <code>scriptCount</code> can suggest many scripts contributing to the backlog.
+      The <code>scriptsLength</code> field shows how many scripts appear in the entry's
+      <code>scripts</code> array. It can be zero even when <code>scriptCount</code> is high,
+      because the array only includes entry points that run for at least 5 ms.</p>
+    <img src="congested-moment.svg" alt="Illustration of 100 short worker tasks forming one congested interval.">
   </body>
 </html>
