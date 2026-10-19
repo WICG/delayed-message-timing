@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email conversation congestion demo</title>
+    <style>
+      body { max-width: 850px; margin: 40px auto; padding: 0 20px; font: 17px/1.6 "Segoe UI", sans-serif; color: #172b4d; }
+      button { padding: 10px 18px; font: inherit; }
+      pre { padding: 16px; background: #f1f4f8; white-space: pre-wrap; overflow-wrap: anywhere; }
+      img { width: 100%; }
+      #status { font-weight: 600; }
+    </style>
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <h1>Opening a long email conversation</h1>
+    <p>Send 100 synthetic email bodies to a dedicated worker in a burst.
+      Each handler extracts preview text and simulates about 3 ms of CPU work.
+      This is not a network or database benchmark.</p>
+    <p>For actual worker LoAF entries, use a Chromium build with the experimental implementation and
+      <code>--enable-blink-features=LongAnimationFrameWorker</code>.
+      Serve this folder over HTTP, not a <code>file:</code> URL.</p>
+    <button id="start" type="button">Open conversation</button>
+    <p id="status" role="status">Ready to start.</p>
+    <h2>Measured workload</h2>
+    <pre id="measurements">No workload has run.</pre>
+    <h2>Actual worker LoAF entries</h2>
+    <p id="support">Support is checked inside the worker when the demo starts.</p>
+    <pre id="entries" aria-label="Actual worker LoAF entries">No entries received.</pre>
+    <p>Workload completion is separate from entry delivery. The worker schedules a trailing
+      timer to allow an idle gap. Timings and entry counts depend on the browser and scheduler;
+      the demo never creates substitute performance entries.</p>
+    <img src="../images/congested-moment.svg" alt="Illustration of 100 short worker tasks forming one congested interval.">
+  </body>
+</html>
