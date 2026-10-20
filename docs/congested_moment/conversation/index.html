@@ -16,14 +16,17 @@
   <body>
     <h1>Opening a long email conversation</h1>
     <p>Imagine opening an email conversation with a long history of replies.
-      The app has already fetched the emails and asks a web worker to extract preview text for each email.</p>
-    <p>This demo processes 100 sample emails. The main thread sends the requests in a quick
+      The worker already has access to the email data. The main thread sends each email's ID
+      to the worker to request preview text.</p>
+    <p>This demo prepares 100 sample emails inside the worker before it signals that it is ready.
+      The main thread sends the preview requests in a quick
       <code>for</code> loop, with about 3 ms of simulated CPU work per email in the worker.
       Together, these short tasks keep the worker busy for roughly 300 ms.
       Later emails wait behind the earlier work, even though each task is short.</p>
     <p>The demo measures processing times and displays actual worker LoAF entries when supported.
       Use a Chromium build with the experimental implementation and
-      <code>--enable-blink-features=LongAnimationFrameWorker</code>.</p>
+      <code>--enable-blink-features=LongAnimationFrameWorker</code>.
+      Serve this folder over HTTP, not a <code>file:</code> URL.</p>
     <button id="start" type="button">Open conversation</button>
     <p id="status" role="status">Ready to start.</p>
     <h2>Measured workload</h2>
