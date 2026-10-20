@@ -18,13 +18,19 @@ if (supported) {
   observer.observe({ type: "long-animation-frame", buffered: true });
 }
 
+const emailBodies = Array.from({ length: 100 }, (_, id) =>
+  `Reply ${id}: Here is the latest update on our project. Please review the changes before our next meeting and share your feedback.`);
+
 let processed = 0;
 let firstStart;
 self.onmessage = ({ data }) => {
   const start = performance.now();
   firstStart ??= start;
   const sendToHandler = performance.timeOrigin + start - data.sentAt;
-  const preview = data.body.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!Number.isInteger(data.id) || data.id < 0 || data.id >= emailBodies.length) {
+    throw new RangeError(`Unknown email ID: ${data.id}`);
+  }
+  const preview = emailBodies[data.id].replace(/\s+/g, " ").trim().slice(0, 80);
   // Simulate CPU processing; real email bodies do not have a fixed processing cost.
   while (performance.now() - start < 3) {}
   const processingDuration = performance.now() - start;
