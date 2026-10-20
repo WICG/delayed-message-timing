@@ -37,7 +37,6 @@ startButton.addEventListener("click", () => {
       for (let id = 0; id < 100; id++) {
         worker.postMessage({
           id,
-          body: `Reply ${id}: Here is the latest update on our project.`,
           sentAt: performance.timeOrigin + performance.now(),
         });
       }
